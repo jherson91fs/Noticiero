@@ -68,7 +68,13 @@ def scrape_fuente(fuente):
                 imagen = urljoin(fuente["base"], imagen)
 
             # Otros datos
-            categoria = fuente.get("categoria")
+            categoria = None
+            if use_container and fuente.get("category_selector"):
+                cat_el = item.select_one(fuente["category_selector"]) 
+                if cat_el:
+                    categoria = cat_el.get_text(strip=True)
+            if not categoria:
+                categoria = fuente.get("categoria")
             fecha = datetime.today().date()
             resumen = None
             if use_container and fuente.get("summary_selector"):

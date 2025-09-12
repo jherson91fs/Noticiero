@@ -10,7 +10,10 @@
     <header>
         <div class="container">
             <h1>Noticiero</h1>
-            <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema">🌓</button>
+            <nav>
+                <a href="/favoritos">★ Favoritos</a>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema">🌓</button>
+            </nav>
         </div>
     </header>
 
@@ -29,6 +32,9 @@
                 <option value="">Todas las categorías</option>
                 <option value="Internacional">Internacional</option>
                 <option value="Nacional">Nacional</option>
+            </select>
+            <select id="filtro-tipo">
+                <option value="">Todos los tipos</option>
             </select>
             <button id="btn-filtrar">Filtrar</button>
         </div>

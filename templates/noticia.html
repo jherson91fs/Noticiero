@@ -10,17 +10,26 @@
     <header>
         <div class="container">
             <h1>Detalle de Noticia</h1>
-            <div>
-                <a href="/">← Volver al inicio</a>
+            <nav>
+                <a href="/">← Inicio</a>
+                <a href="/favoritos">★ Favoritos</a>
                 <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema">🌓</button>
-            </div>
+            </nav>
         </div>
     </header>
 
     <main>
-        <section id="detalle-noticia" class="container">
-            <!-- Detalle cargado con JS -->
-        </section>
+        <div class="container layout-detail">
+            <section id="detalle-noticia" class="detail">
+                <!-- Detalle cargado con JS -->
+            </section>
+            <aside class="sidebar">
+                <div class="panel">
+                    <h3>Relacionadas</h3>
+                    <div id="relacionadas-list" class="related-grid"></div>
+                </div>
+            </aside>
+        </div>
     </main>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>

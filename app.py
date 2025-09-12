@@ -39,6 +39,7 @@ def crear_base_y_tabla():
                 titulo VARCHAR(500) NOT NULL,
                 link VARCHAR(500) NOT NULL,
                 categoria VARCHAR(100),
+                tipo VARCHAR(50),
                 fecha DATE,
                 resumen TEXT,
                 autor VARCHAR(255),
@@ -48,6 +49,11 @@ def crear_base_y_tabla():
                 UNIQUE KEY unique_link (link)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
         """)
+        # Intentar agregar columna tipo si la tabla ya existía
+        try:
+            cursor.execute("ALTER TABLE noticias ADD COLUMN tipo VARCHAR(50)")
+        except Exception:
+            pass
         # Índices útiles (si ya existen, ignorar error)
         try:
             cursor.execute("CREATE INDEX idx_fecha ON noticias (fecha)")
@@ -101,10 +107,11 @@ def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuen
             return False, "Duplicado"
 
         fecha_scraping = datetime.now()
+        tipo = clasificar_tipo(titulo, resumen, categoria, fuente)
         cursor.execute("""
-            INSERT INTO noticias (titulo, link, categoria, fecha, resumen, autor, imagen, fuente, fecha_scraping)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (titulo, link, categoria, fecha, resumen, autor, imagen, fuente, fecha_scraping))
+            INSERT INTO noticias (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, fecha_scraping)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, fecha_scraping))
         conn.commit()
         conn.close()
         return True, "Guardado"
@@ -112,6 +119,23 @@ def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuen
         print(f"❌ Error al insertar noticia: {e}")
         conn.close()
         return False, "Error DB"
+
+# ---------------- CLASIFICACIÓN ----------------
+def clasificar_tipo(titulo, resumen, categoria, fuente):
+    texto = " ".join([str(x or "") for x in [titulo, resumen, categoria, fuente]]).lower()
+    reglas = [
+        ("deporte", ["deporte", "futbol", "fútbol", "liga", "partido", "gol", "selección", "mundial"]),
+        ("comedia", ["humor", "broma", "meme", "parodia", "satira", "sátira", "chiste"]),
+        ("economía", ["economía", "dólar", "inflación", "bcr", "mercado", "bolsa"]),
+        ("política", ["congreso", "presidente", "ministro", "política", "gobierno", "elecciones"]),
+        ("policial", ["policía", "pnp", "homicidio", "robo", "capturan", "detienen"]),
+        ("salud", ["salud", "hospital", "covid", "vacuna", "epidemia"]),
+        ("educación", ["educación", "universidad", "colegio", "estudiantes", "sunedu"]),
+    ]
+    for etiqueta, palabras in reglas:
+        if any(p in texto for p in palabras):
+            return etiqueta
+    return "informativo"
 
 def ultima_fecha_fuente(fuente):
     conn = get_connection()
@@ -187,7 +211,14 @@ def scrape_fuente(fuente):
             if imagen:
                 imagen = urljoin(fuente["base"], imagen)
 
-            categoria = fuente.get("categoria")
+            # Categoría: usar category_selector si existe, si no, la fija de la fuente (si la hubiera)
+            categoria = None
+            if use_container and fuente.get("category_selector"):
+                cat_el = item.select_one(fuente["category_selector"]) 
+                if cat_el:
+                    categoria = cat_el.get_text(strip=True)
+            if not categoria:
+                categoria = fuente.get("categoria")
             fecha = datetime.today().date()
             resumen = None
             if use_container and fuente.get("summary_selector"):
@@ -251,6 +282,10 @@ def home():
 def noticia_detalle():
     return render_template("noticia.html")
 
+@app.route("/favoritos")
+def favoritos():
+    return render_template("favoritos.html")
+
 @app.route("/favicon.ico")
 def favicon():
     return app.send_static_file("favicon.ico")
@@ -265,6 +300,7 @@ def listar_noticias():
     # Filtros opcionales para compatibilidad simple
     fuente = request.args.get("fuente")
     categoria = request.args.get("categoria")
+    tipo = request.args.get("tipo")
 
     conn = get_connection()
     if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
@@ -280,6 +316,9 @@ def listar_noticias():
     if categoria:
         base_query += " AND categoria = %s"
         params.append(categoria)
+    if tipo:
+        base_query += " AND tipo = %s"
+        params.append(tipo)
     base_query += " ORDER BY fecha DESC LIMIT %s OFFSET %s"
     params.extend([limit, offset])
     cursor.execute(base_query, tuple(params))
@@ -293,6 +332,7 @@ def filtrar_noticias():
     fuente = request.args.get("fuente")
     categoria = request.args.get("categoria")
     fecha = request.args.get("fecha")
+    tipo = request.args.get("tipo")
     page = int(request.args.get("page", 1))
     limit = int(request.args.get("limit", 10))
     offset = (page - 1) * limit
@@ -303,6 +343,7 @@ def filtrar_noticias():
     if fuente: query += " AND fuente = %s"; params.append(fuente)
     if categoria: query += " AND categoria = %s"; params.append(categoria)
     if fecha: query += " AND fecha = %s"; params.append(fecha)
+    if tipo: query += " AND tipo = %s"; params.append(tipo)
     # Excluir Peru21 de forma global
     query += " AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))"
 
@@ -360,8 +401,66 @@ def meta_info():
     fuentes = [row[0] for row in cursor.fetchall()]
     cursor.execute("SELECT DISTINCT categoria FROM noticias WHERE categoria IS NOT NULL AND categoria <> ''")
     categorias = [row[0] for row in cursor.fetchall()]
+    cursor.execute("SELECT DISTINCT tipo FROM noticias WHERE tipo IS NOT NULL AND tipo <> ''")
+    tipos = [row[0] for row in cursor.fetchall()]
     conn.close()
-    return jsonify({"fuentes": fuentes, "categorias": categorias}), 200
+    return jsonify({"fuentes": fuentes, "categorias": categorias, "tipos": tipos}), 200
+
+@app.route("/api/noticias/relacionadas", methods=["GET"])
+def noticias_relacionadas():
+    noticia_id = request.args.get("id")
+    limit = int(request.args.get("limit", 6))
+    modo = request.args.get("modo", "categoria")  # categoria | tipo | random
+    if not noticia_id:
+        return jsonify({"error": "Falta ?id"}), 400
+    conn = get_connection()
+    if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+    cur = conn.cursor(dictionary=True)
+    # Buscar noticia base
+    cur.execute("SELECT categoria, tipo, fuente FROM noticias WHERE id = %s", (noticia_id,))
+    base = cur.fetchone()
+    if not base:
+        conn.close()
+        return jsonify({"mensaje": "No existe la noticia"}), 404
+    if modo == "random":
+        cur.execute(
+            """
+            SELECT * FROM noticias
+            WHERE id <> %s
+              AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))
+            ORDER BY RAND()
+            LIMIT %s
+            """,
+            (noticia_id, limit)
+        )
+    elif modo == "tipo":
+        cur.execute(
+            """
+            SELECT * FROM noticias
+            WHERE id <> %s
+              AND (tipo IS NOT NULL AND tipo = %s)
+              AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))
+            ORDER BY fecha DESC
+            LIMIT %s
+            """,
+            (noticia_id, base.get("tipo"), limit)
+        )
+    else:
+        # categoria (por defecto)
+        cur.execute(
+            """
+            SELECT * FROM noticias
+            WHERE id <> %s
+              AND (categoria IS NOT NULL AND categoria = %s)
+              AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))
+            ORDER BY fecha DESC
+            LIMIT %s
+            """,
+            (noticia_id, base.get("categoria"), limit)
+        )
+    rows = cur.fetchall()
+    conn.close()
+    return jsonify(rows), 200
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":

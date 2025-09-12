@@ -11,6 +11,9 @@ function crearNodoNoticia(n) {
         ${meta}
         ${img}
         <p>${n.resumen || ''}</p>
+        <div class="actions">
+            <button class="btn-fav-card" data-id="${n.id}">⭐</button>
+        </div>
     `;
     return div;
 }
@@ -20,7 +23,7 @@ function cargarNoticias(filtros = {}, append = true) {
     if (!append) contenedor.innerHTML = '';
 
     // Preferir endpoint de filtro cuando existan filtros o búsqueda
-    const tieneFiltros = filtros.fuente || filtros.categoria || filtros.fecha || filtros.q;
+    const tieneFiltros = filtros.fuente || filtros.categoria || filtros.fecha || filtros.tipo || filtros.q;
     let url = tieneFiltros
         ? `/api/noticias/filtrar?`
         : `/api/noticias?`;
@@ -31,6 +34,7 @@ function cargarNoticias(filtros = {}, append = true) {
     if (filtros.fuente) params.set('fuente', filtros.fuente);
     if (filtros.categoria) params.set('categoria', filtros.categoria);
     if (filtros.fecha) params.set('fecha', filtros.fecha);
+    if (filtros.tipo) params.set('tipo', filtros.tipo);
     if (filtros.q) {
         url = `/api/noticias/buscar?`;
         params.delete('fuente');
@@ -53,6 +57,7 @@ function cargarNoticias(filtros = {}, append = true) {
                 return;
             }
             data.forEach(noticia => contenedor.appendChild(crearNodoNoticia(noticia)));
+            bindFavButtons();
         })
         .catch(() => {
             const err = document.createElement('p');
@@ -70,6 +75,7 @@ if (btnMas) {
         cargarNoticias({
             fuente: document.getElementById('filtro-fuente')?.value,
             categoria: document.getElementById('filtro-categoria')?.value,
+            tipo: document.getElementById('filtro-tipo')?.value,
             q: document.getElementById('busqueda')?.value
         }, true);
     });
@@ -83,6 +89,7 @@ if (btnFiltrar) {
         cargarNoticias({
             fuente: document.getElementById('filtro-fuente')?.value,
             categoria: document.getElementById('filtro-categoria')?.value,
+            tipo: document.getElementById('filtro-tipo')?.value,
             q: document.getElementById('busqueda')?.value
         }, false);
     });
@@ -92,6 +99,7 @@ if (btnFiltrar) {
 function poblarFiltros() {
     const selFuente = document.getElementById('filtro-fuente');
     const selCategoria = document.getElementById('filtro-categoria');
+    const selTipo = document.getElementById('filtro-tipo');
     if (!selFuente || !selCategoria) return;
     fetch('/api/meta')
         .then(r => r.json())
@@ -113,6 +121,15 @@ function poblarFiltros() {
                     opt.value = c;
                     opt.textContent = c;
                     selCategoria.appendChild(opt);
+                });
+            }
+            if (selTipo && meta.tipos) {
+                selTipo.length = 1;
+                meta.tipos.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.textContent = t;
+                    selTipo.appendChild(opt);
                 });
             }
         })
@@ -140,10 +157,114 @@ function cargarDetalle() {
                     ${meta}
                     ${img}
                     <p>${n.resumen || ''}</p>
-                    <p><a href="${n.link}" target="_blank" rel="noopener">Ver fuente original ↗</a></p>
+                    <div class="actions">
+                        <button id="btn-fav" data-id="${n.id}">⭐ Guardar</button>
+                        <button id="btn-share" data-id="${n.id}">Compartir</button>
+                        <a href="${n.link}" target="_blank" rel="noopener">Ver fuente original ↗</a>
+                    </div>
                 </article>
             `;
+            setupBookmarking(n);
+            cargarRelacionadas(n.id);
         });
+}
+
+// Bookmarks y compartir
+function setupBookmarking(n) {
+    const key = 'favoritos';
+    const getFavs = () => JSON.parse(localStorage.getItem(key) || '[]');
+    const setFavs = (arr) => localStorage.setItem(key, JSON.stringify(arr));
+    const btn = document.getElementById('btn-fav');
+    const btnShare = document.getElementById('btn-share');
+    if (btn) {
+        const favs = getFavs();
+        const isFav = favs.includes(n.id);
+        btn.textContent = isFav ? '★ Guardado' : '⭐ Guardar';
+        btn.addEventListener('click', () => {
+            const f = getFavs();
+            const idx = f.indexOf(n.id);
+            if (idx >= 0) f.splice(idx, 1); else f.push(n.id);
+            setFavs(f);
+            btn.textContent = f.includes(n.id) ? '★ Guardado' : '⭐ Guardar';
+        });
+    }
+    if (btnShare) {
+        btnShare.addEventListener('click', async () => {
+            const shareData = { title: n.titulo, text: n.resumen || n.titulo, url: window.location.href };
+            if (navigator.share) {
+                try { await navigator.share(shareData); } catch {}
+            } else {
+                navigator.clipboard?.writeText(shareData.url);
+                alert('Link copiado');
+            }
+        });
+    }
+}
+
+function cargarRelacionadas(id) {
+    fetch(`/api/noticias/relacionadas?id=${id}&limit=6`)
+        .then(r => r.json())
+        .then(list => {
+            const box = document.getElementById('relacionadas-list');
+            if (!box) return;
+            box.innerHTML = '';
+            (list || []).forEach(n => {
+                const d = document.createElement('div');
+                d.className = 'noticia';
+                d.innerHTML = `<h4><a href="/noticia?id=${n.id}">${n.titulo}</a></h4>`;
+                box.appendChild(d);
+            });
+        });
+}
+
+// ----- Favoritos: lista dedicada -----
+function getFavs() { return JSON.parse(localStorage.getItem('favoritos') || '[]'); }
+function setFavs(arr) { localStorage.setItem('favoritos', JSON.stringify(arr)); }
+
+function bindFavButtons() {
+    document.querySelectorAll('.btn-fav-card').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const id = Number(btn.getAttribute('data-id'));
+            const favs = getFavs();
+            const idx = favs.indexOf(id);
+            if (idx >= 0) favs.splice(idx, 1); else favs.push(id);
+            setFavs(favs);
+            btn.textContent = favs.includes(id) ? '★' : '⭐';
+        });
+        const id = Number(btn.getAttribute('data-id'));
+        btn.textContent = getFavs().includes(id) ? '★' : '⭐';
+    });
+}
+
+function renderFavoritos() {
+    const list = document.getElementById('lista-favoritos');
+    if (!list) return;
+    const ids = getFavs();
+    if (!ids.length) { list.innerHTML = '<p class="meta">No tienes favoritos aún.</p>'; return; }
+    list.innerHTML = '';
+    const q = document.getElementById('fav-busqueda')?.value?.toLowerCase() || '';
+    Promise.all(ids.map(id => fetch(`/api/noticias/${id}`).then(r => r.json()).catch(() => null)))
+        .then(items => {
+            items.filter(Boolean).forEach(n => {
+                if (q && !(n.titulo?.toLowerCase().includes(q) || n.resumen?.toLowerCase().includes(q))) return;
+                list.appendChild(crearNodoNoticia(n));
+            });
+            bindFavButtons();
+        });
+    const btnExport = document.getElementById('btn-exportar');
+    const btnClear = document.getElementById('btn-limpiar');
+    if (btnExport) btnExport.onclick = () => {
+        const blob = new Blob([JSON.stringify(ids)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'favoritos.json';
+        a.click();
+    };
+    if (btnClear) btnClear.onclick = () => {
+        if (confirm('¿Limpiar todos los favoritos?')) { localStorage.removeItem('favoritos'); renderFavoritos(); }
+    };
+    const input = document.getElementById('fav-busqueda');
+    if (input) input.oninput = () => renderFavoritos();
 }
 
 // Carga inicial según página

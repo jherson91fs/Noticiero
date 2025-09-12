@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Favoritos</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <h1>Favoritos</h1>
+            <nav>
+                <a href="/">← Inicio</a>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema">🌓</button>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="container">
+            <div class="actions" style="justify-content: space-between; gap: 12px;">
+                <div>
+                    <button id="btn-exportar">Exportar JSON</button>
+                    <button id="btn-limpiar">Limpiar favoritos</button>
+                </div>
+                <div>
+                    <input id="fav-busqueda" type="text" placeholder="Buscar en favoritos..." />
+                </div>
+            </div>
+            <section id="lista-favoritos" class="container" style="padding-top:0;"></section>
+        </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+    <script>
+        renderFavoritos();
+    </script>
+</body>
+</html>
+
+
