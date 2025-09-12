@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Noticiero</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Noticiero</h1>
+    </header>
+
+    <section id="filtros">
+        <input type="text" id="busqueda" placeholder="Buscar noticia...">
+        <select id="filtro-fuente">
+            <option value="">Todas las fuentes</option>
+            <option value="BBC Mundo">BBC Mundo</option>
+            <option value="RPP Noticias">RPP Noticias</option>
+            <option value="El Comercio">El Comercio</option>
+            <option value="Perú21">Perú21</option>
+            <option value="La República">La República</option>
+        </select>
+        <select id="filtro-categoria">
+            <option value="">Todas las categorías</option>
+            <option value="Internacional">Internacional</option>
+            <option value="Nacional">Nacional</option>
+        </select>
+        <button id="btn-filtrar">Filtrar</button>
+    </section>
+
+    <section id="noticias">
+        <!-- Noticias se cargarán aquí -->
+    </section>
+
+    <button id="btn-cargar-mas">Cargar más</button>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>
