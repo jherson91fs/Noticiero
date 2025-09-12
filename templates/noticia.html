@@ -8,14 +8,21 @@
 </head>
 <body>
     <header>
-        <h1>Detalle de Noticia</h1>
-        <a href="/">← Volver al inicio</a>
+        <div class="container">
+            <h1>Detalle de Noticia</h1>
+            <div>
+                <a href="/">← Volver al inicio</a>
+                <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema">🌓</button>
+            </div>
+        </div>
     </header>
 
-    <section id="detalle-noticia">
-        <!-- Detalle cargado con JS -->
-    </section>
+    <main>
+        <section id="detalle-noticia" class="container">
+            <!-- Detalle cargado con JS -->
+        </section>
+    </main>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
+    </body>
 </html>

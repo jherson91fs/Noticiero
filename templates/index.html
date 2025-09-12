@@ -8,33 +8,45 @@
 </head>
 <body>
     <header>
-        <h1>Noticiero</h1>
+        <div class="container">
+            <h1>Noticiero</h1>
+            <button id="theme-toggle" class="theme-toggle" aria-label="Cambiar tema">🌓</button>
+        </div>
     </header>
 
     <section id="filtros">
-        <input type="text" id="busqueda" placeholder="Buscar noticia...">
-        <select id="filtro-fuente">
-            <option value="">Todas las fuentes</option>
-            <option value="BBC Mundo">BBC Mundo</option>
-            <option value="RPP Noticias">RPP Noticias</option>
-            <option value="El Comercio">El Comercio</option>
-            <option value="Perú21">Perú21</option>
-            <option value="La República">La República</option>
-        </select>
-        <select id="filtro-categoria">
-            <option value="">Todas las categorías</option>
-            <option value="Internacional">Internacional</option>
-            <option value="Nacional">Nacional</option>
-        </select>
-        <button id="btn-filtrar">Filtrar</button>
+        <div class="container">
+            <input type="text" id="busqueda" placeholder="Buscar noticia...">
+            <select id="filtro-fuente">
+                <option value="">Todas las fuentes</option>
+                <option value="BBC Mundo">BBC Mundo</option>
+                <option value="RPP Noticias">RPP Noticias</option>
+                <option value="El Comercio">El Comercio</option>
+                <option value="Perú21">Perú21</option>
+                <option value="La República">La República</option>
+            </select>
+            <select id="filtro-categoria">
+                <option value="">Todas las categorías</option>
+                <option value="Internacional">Internacional</option>
+                <option value="Nacional">Nacional</option>
+            </select>
+            <button id="btn-filtrar">Filtrar</button>
+        </div>
     </section>
 
-    <section id="noticias">
-        <!-- Noticias se cargarán aquí -->
-    </section>
-
-    <button id="btn-cargar-mas">Cargar más</button>
+    <main>
+        <section id="noticias" class="container">
+            <!-- Noticias se cargarán aquí -->
+        </section>
+        <div class="actions">
+            <button id="btn-cargar-mas">Cargar más</button>
+        </div>
+    </main>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
-</body>
+    <script>
+        // Inicializar selects con datos reales
+        poblarFiltros();
+    </script>
+    </body>
 </html>

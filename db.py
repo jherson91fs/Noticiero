@@ -1,13 +1,16 @@
 import mysql.connector
 from mysql.connector import Error
 from datetime import datetime
+import os
+from dotenv import load_dotenv
 
 # ----------------- CONFIG DB -----------------
+load_dotenv()
 db_config = {
-    "host": "localhost",
-    "user": "root",       # root sin password
-    "password": "",
-    "database": "noticiero_db"
+    "host": os.getenv("DB_HOST", "localhost"),
+    "user": os.getenv("DB_USER", "root"),
+    "password": os.getenv("DB_PASSWORD", ""),
+    "database": os.getenv("DB_NAME", "noticiero_db")
 }
 
 # ----------------- FUNCIONES -----------------
@@ -33,6 +36,12 @@ def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuen
 
     try:
         cursor = conn.cursor()
+
+        # Bloquear cualquier noticia de Peru21/Perú21
+        if fuente and fuente.strip().lower() in ("peru21", "perú21"):
+            cursor.close()
+            conn.close()
+            return False
 
         # Verificar duplicados (por título y link)
         cursor.execute("SELECT id FROM noticias WHERE titulo = %s AND link = %s", (titulo, link))
