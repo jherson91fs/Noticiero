@@ -1,18 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime
-from db import guardar_noticia
-from sources import FUENTES
+from db import guardar_noticia, crear_tabla_si_no_existe
+from sources import FUENTES, obtener_fuentes_por_categoria, obtener_categorias_disponibles, clasificar_noticia
 from urllib.parse import urljoin
+import sys
 
-# ----------------- LISTA DE FUENTES -----------------
-# Atributos:
-#   - url: página principal
-#   - fuente: nombre del medio
-#   - base: dominio (para links relativos)
-#   - selector: selector CSS para noticias
-#   - selector_img: selector CSS para imágenes (opcional)
-#   - categoria: categoría general
 
 # FUENTES importadas desde sources.py
 
@@ -87,16 +80,52 @@ def scrape_fuente(fuente):
                 if aut_el:
                     autor = aut_el.get_text(strip=True)
 
+            # Clasificar la noticia automáticamente
+            clasificacion = clasificar_noticia(titulo, resumen, fuente.get("categoria", "nacional"))
+            
             guardar_noticia(
-                titulo, link, categoria, fecha, resumen, autor, imagen, fuente["fuente"]
+                titulo, link, clasificacion["categoria"], fecha, resumen, autor, imagen, fuente["fuente"], clasificacion["departamento"]
             )
 
     except Exception as e:
         print(f"❌ Error en {fuente['fuente']}: {e}")
 
+# ----------------- FUNCIÓN PARA SCRAPING POR CATEGORÍA -----------------
+def scrape_por_categoria(categoria=None):
+    """
+    Realiza scraping de noticias para una categoría específica o todas las fuentes.
+    
+    Args:
+        categoria: 'nacional', 'internacional', 'regional' o None para todas
+    """
+    print(f"🚀 Iniciando scraping para: {categoria or 'TODAS LAS CATEGORÍAS'}...")
+    
+    # Crear tabla si no existe
+    crear_tabla_si_no_existe()
+    
+    # Obtener fuentes según la categoría
+    if categoria:
+        fuentes = obtener_fuentes_por_categoria(categoria)
+        if not fuentes:
+            print(f"❌ No se encontraron fuentes para la categoría: {categoria}")
+            return
+        print(f"📂 Scrapeando {len(fuentes)} fuentes para categoría: {categoria}")
+    else:
+        fuentes = FUENTES
+        print(f"🌍 Scrapeando {len(fuentes)} fuentes de todas las categorías")
+    
+    # Realizar scraping
+    for fuente in fuentes:
+        scrape_fuente(fuente)
+    
+    print(f"✅ Finalizó scraping para: {categoria or 'TODAS LAS CATEGORÍAS'}")
+
 # ----------------- MAIN -----------------
 if __name__ == "__main__":
-    print("🚀 Iniciando scraping multipáginas con imágenes...")
-    for fuente in FUENTES:
-        scrape_fuente(fuente)
-    print("✅ Finalizó scraping de todas las fuentes.")
+    # Verificar argumentos de línea de comandos
+    categoria = None
+    if len(sys.argv) > 1:
+        categoria = sys.argv[1].lower()
+        print(f"📂 Modo categoría: {categoria}")
+    
+    scrape_por_categoria(categoria)

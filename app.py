@@ -9,7 +9,9 @@ import time
 from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
-from sources import FUENTES
+from sources import FUENTES, obtener_fuentes_por_categoria, obtener_categorias_disponibles, clasificar_noticia
+from db import crear_tabla_si_no_existe, obtener_departamentos_con_noticias, obtener_categorias_con_noticias
+import re
 
 # ---------------- FLASK ----------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -23,6 +25,14 @@ DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_NAME = os.getenv("DB_NAME", "noticiero_db")
 
+# Sanitizar el nombre de la base de datos para evitar inyección en DDL
+def _sanitize_db_name(db_name):
+    # Permitir solo letras, números y guiones bajos
+    clean = re.sub(r"[^0-9A-Za-z_]", "", db_name or "")
+    return clean or "noticiero_db"
+
+DB_NAME = _sanitize_db_name(DB_NAME)
+
 def crear_base_y_tabla():
     try:
         conn = mysql.connector.connect(
@@ -31,8 +41,8 @@ def crear_base_y_tabla():
             password=DB_PASSWORD
         )
         cursor = conn.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
-        cursor.execute(f"USE {DB_NAME};")
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+        cursor.execute(f"USE `{DB_NAME}`;")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS noticias (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -45,6 +55,7 @@ def crear_base_y_tabla():
                 autor VARCHAR(255),
                 imagen VARCHAR(500),
                 fuente VARCHAR(255),
+                departamento VARCHAR(50),
                 fecha_scraping DATETIME,
                 UNIQUE KEY unique_link (link)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -52,6 +63,11 @@ def crear_base_y_tabla():
         # Intentar agregar columna tipo si la tabla ya existía
         try:
             cursor.execute("ALTER TABLE noticias ADD COLUMN tipo VARCHAR(50)")
+        except Exception:
+            pass
+        # Intentar agregar columna departamento si la tabla ya existía
+        try:
+            cursor.execute("ALTER TABLE noticias ADD COLUMN departamento VARCHAR(50)")
         except Exception:
             pass
         # Índices útiles (si ya existen, ignorar error)
@@ -65,6 +81,10 @@ def crear_base_y_tabla():
             pass
         try:
             cursor.execute("CREATE INDEX idx_categoria ON noticias (categoria)")
+        except Exception:
+            pass
+        try:
+            cursor.execute("CREATE INDEX idx_departamento ON noticias (departamento)")
         except Exception:
             pass
         try:
@@ -90,7 +110,7 @@ def get_connection():
         print(f"❌ Error en la conexión a DB: {e}")
         return None
 
-def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuente):
+def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento=None):
     conn = get_connection()
     if not conn:
         return False, "Error DB"
@@ -108,10 +128,18 @@ def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuen
 
         fecha_scraping = datetime.now()
         tipo = clasificar_tipo(titulo, resumen, categoria, fuente)
+        
+        # Si no se especifica categoría, clasificar automáticamente
+        if not categoria:
+            clasificacion = clasificar_noticia(titulo, resumen, "nacional")
+            categoria = clasificacion["categoria"]
+            if not departamento:
+                departamento = clasificacion["departamento"]
+        
         cursor.execute("""
-            INSERT INTO noticias (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, fecha_scraping)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, fecha_scraping))
+            INSERT INTO noticias (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, departamento, fecha_scraping)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, departamento, fecha_scraping))
         conn.commit()
         conn.close()
         return True, "Guardado"
@@ -252,7 +280,13 @@ def scrape_fuente(fuente):
                         fecha = parsed
 
             if not ultima_fecha or fecha > ultima_fecha.date():
-                ok, mensaje = guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuente["fuente"])
+                # Clasificar automáticamente la noticia
+                clasificacion = clasificar_noticia(titulo, resumen, fuente.get("categoria", "nacional"))
+                
+                ok, mensaje = guardar_noticia(
+                    titulo, link, clasificacion["categoria"], fecha, resumen, autor, imagen, 
+                    fuente["fuente"], clasificacion["departamento"]
+                )
                 if ok: nuevas += 1
                 elif mensaje == "Duplicado": duplicados += 1
                 else: errores += 1
@@ -301,6 +335,7 @@ def listar_noticias():
     fuente = request.args.get("fuente")
     categoria = request.args.get("categoria")
     tipo = request.args.get("tipo")
+    departamento = request.args.get("departamento")
     fecha_desde = request.args.get("fecha_desde")
     fecha_hasta = request.args.get("fecha_hasta")
     ordenar = request.args.get("ordenar", "fecha_desc")  # fecha_desc, fecha_asc, titulo_asc, titulo_desc
@@ -322,6 +357,9 @@ def listar_noticias():
     if tipo:
         base_query += " AND tipo = %s"
         params.append(tipo)
+    if departamento:
+        base_query += " AND departamento = %s"
+        params.append(departamento)
     if fecha_desde:
         base_query += " AND fecha >= %s"
         params.append(fecha_desde)
@@ -329,16 +367,16 @@ def listar_noticias():
         base_query += " AND fecha <= %s"
         params.append(fecha_hasta)
     
-    # Ordenamiento
+    # Ordenamiento - priorizar noticias más recientes
     order_clause = "ORDER BY "
     if ordenar == "fecha_asc":
-        order_clause += "fecha ASC"
+        order_clause += "fecha ASC, fecha_scraping DESC"
     elif ordenar == "titulo_asc":
-        order_clause += "titulo ASC"
+        order_clause += "titulo ASC, fecha_scraping DESC"
     elif ordenar == "titulo_desc":
-        order_clause += "titulo DESC"
-    else:  # fecha_desc por defecto
-        order_clause += "fecha DESC"
+        order_clause += "titulo DESC, fecha_scraping DESC"
+    else:  # fecha_desc por defecto - mostrar las más recientes primero
+        order_clause += "fecha_scraping DESC, fecha DESC"
     
     base_query += f" {order_clause} LIMIT %s OFFSET %s"
     params.extend([limit, offset])
@@ -358,6 +396,9 @@ def listar_noticias():
     if tipo:
         count_query += " AND tipo = %s"
         count_params.append(tipo)
+    if departamento:
+        count_query += " AND departamento = %s"
+        count_params.append(departamento)
     if fecha_desde:
         count_query += " AND fecha >= %s"
         count_params.append(fecha_desde)
@@ -390,6 +431,7 @@ def filtrar_noticias():
     categoria = request.args.get("categoria")
     fecha = request.args.get("fecha")
     tipo = request.args.get("tipo")
+    departamento = request.args.get("departamento")
     fecha_desde = request.args.get("fecha_desde")
     fecha_hasta = request.args.get("fecha_hasta")
     ordenar = request.args.get("ordenar", "fecha_desc")
@@ -404,6 +446,7 @@ def filtrar_noticias():
     if categoria: query += " AND categoria = %s"; params.append(categoria)
     if fecha: query += " AND fecha = %s"; params.append(fecha)
     if tipo: query += " AND tipo = %s"; params.append(tipo)
+    if departamento: query += " AND departamento = %s"; params.append(departamento)
     if fecha_desde: query += " AND fecha >= %s"; params.append(fecha_desde)
     if fecha_hasta: query += " AND fecha <= %s"; params.append(fecha_hasta)
     # Excluir Peru21 de forma global
@@ -414,16 +457,16 @@ def filtrar_noticias():
 
     cursor = conn.cursor(dictionary=True)
     
-    # Ordenamiento
+    # Ordenamiento - priorizar noticias más recientes
     order_clause = "ORDER BY "
     if ordenar == "fecha_asc":
-        order_clause += "fecha ASC"
+        order_clause += "fecha ASC, fecha_scraping DESC"
     elif ordenar == "titulo_asc":
-        order_clause += "titulo ASC"
+        order_clause += "titulo ASC, fecha_scraping DESC"
     elif ordenar == "titulo_desc":
-        order_clause += "titulo DESC"
-    else:  # fecha_desc por defecto
-        order_clause += "fecha DESC"
+        order_clause += "titulo DESC, fecha_scraping DESC"
+    else:  # fecha_desc por defecto - mostrar las más recientes primero
+        order_clause += "fecha_scraping DESC, fecha DESC"
     
     query += f" {order_clause} LIMIT %s OFFSET %s"
     params.extend([limit, offset])
@@ -437,6 +480,7 @@ def filtrar_noticias():
     if categoria: count_query += " AND categoria = %s"; count_params.append(categoria)
     if fecha: count_query += " AND fecha = %s"; count_params.append(fecha)
     if tipo: count_query += " AND tipo = %s"; count_params.append(tipo)
+    if departamento: count_query += " AND departamento = %s"; count_params.append(departamento)
     if fecha_desde: count_query += " AND fecha >= %s"; count_params.append(fecha_desde)
     if fecha_hasta: count_query += " AND fecha <= %s"; count_params.append(fecha_hasta)
     count_query += " AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))"
@@ -488,16 +532,16 @@ def buscar_noticias():
     
     query = "SELECT * FROM noticias WHERE (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21')) AND (titulo LIKE %s OR resumen LIKE %s)"
     
-    # Ordenamiento
+    # Ordenamiento - priorizar noticias más recientes
     order_clause = "ORDER BY "
     if ordenar == "fecha_asc":
-        order_clause += "fecha ASC"
+        order_clause += "fecha ASC, fecha_scraping DESC"
     elif ordenar == "titulo_asc":
-        order_clause += "titulo ASC"
+        order_clause += "titulo ASC, fecha_scraping DESC"
     elif ordenar == "titulo_desc":
-        order_clause += "titulo DESC"
-    else:  # fecha_desc por defecto
-        order_clause += "fecha DESC"
+        order_clause += "titulo DESC, fecha_scraping DESC"
+    else:  # fecha_desc por defecto - mostrar las más recientes primero
+        order_clause += "fecha_scraping DESC, fecha DESC"
     
     query += f" {order_clause} LIMIT %s OFFSET %s"
     cursor.execute(query, (f"%{keyword}%", f"%{keyword}%", limit, offset))
@@ -537,8 +581,128 @@ def meta_info():
     categorias = [row[0] for row in cursor.fetchall()]
     cursor.execute("SELECT DISTINCT tipo FROM noticias WHERE tipo IS NOT NULL AND tipo <> ''")
     tipos = [row[0] for row in cursor.fetchall()]
+    cursor.execute("SELECT DISTINCT departamento FROM noticias WHERE departamento IS NOT NULL AND departamento <> ''")
+    departamentos = [row[0] for row in cursor.fetchall()]
     conn.close()
-    return jsonify({"fuentes": fuentes, "categorias": categorias, "tipos": tipos}), 200
+    return jsonify({"fuentes": fuentes, "categorias": categorias, "tipos": tipos, "departamentos": departamentos}), 200
+
+@app.route("/api/categorias", methods=["GET"])
+def listar_categorias():
+    """Devuelve lista de categorías disponibles con conteo de noticias"""
+    conn = get_connection()
+    if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT categoria, COUNT(*) as cantidad 
+        FROM noticias 
+        WHERE categoria IS NOT NULL AND categoria <> '' 
+        GROUP BY categoria 
+        ORDER BY cantidad DESC
+    """)
+    categorias = cursor.fetchall()
+    conn.close()
+    return jsonify({"categorias": categorias}), 200
+
+@app.route("/api/noticias/categoria/<categoria>", methods=["GET"])
+def noticias_por_categoria(categoria):
+    """Obtiene noticias de una categoría específica"""
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 10))
+    offset = (page - 1) * limit
+    
+    conn = get_connection()
+    if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    
+    # Obtener noticias de la categoría
+    cursor.execute("""
+        SELECT * FROM noticias 
+        WHERE categoria = %s 
+        ORDER BY fecha_scraping DESC 
+        LIMIT %s OFFSET %s
+    """, (categoria, limit, offset))
+    noticias = cursor.fetchall()
+    
+    # Contar total
+    cursor.execute("SELECT COUNT(*) as total FROM noticias WHERE categoria = %s", (categoria,))
+    total = cursor.fetchone()["total"]
+    
+    conn.close()
+    
+    total_pages = (total + limit - 1) // limit
+    return jsonify({
+        "noticias": noticias,
+        "categoria": categoria,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }), 200
+
+@app.route("/api/departamentos", methods=["GET"])
+def listar_departamentos():
+    """Devuelve lista de departamentos disponibles con conteo de noticias"""
+    conn = get_connection()
+    if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT departamento, COUNT(*) as cantidad 
+        FROM noticias 
+        WHERE departamento IS NOT NULL AND departamento <> '' 
+        GROUP BY departamento 
+        ORDER BY cantidad DESC
+    """)
+    departamentos = cursor.fetchall()
+    conn.close()
+    return jsonify({"departamentos": departamentos}), 200
+
+@app.route("/api/noticias/departamento/<departamento>", methods=["GET"])
+def noticias_por_departamento(departamento):
+    """Obtiene noticias de un departamento específico"""
+    page = int(request.args.get("page", 1))
+    limit = int(request.args.get("limit", 10))
+    offset = (page - 1) * limit
+    
+    conn = get_connection()
+    if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+
+    cursor = conn.cursor(dictionary=True)
+    
+    # Obtener noticias del departamento
+    cursor.execute("""
+        SELECT * FROM noticias 
+        WHERE departamento = %s 
+        ORDER BY fecha_scraping DESC 
+        LIMIT %s OFFSET %s
+    """, (departamento, limit, offset))
+    noticias = cursor.fetchall()
+    
+    # Contar total
+    cursor.execute("SELECT COUNT(*) as total FROM noticias WHERE departamento = %s", (departamento,))
+    total = cursor.fetchone()["total"]
+    
+    conn.close()
+    
+    total_pages = (total + limit - 1) // limit
+    return jsonify({
+        "noticias": noticias,
+        "departamento": departamento,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }), 200
 
 @app.route("/api/noticias/relacionadas", methods=["GET"])
 def noticias_relacionadas():
@@ -595,6 +759,52 @@ def noticias_relacionadas():
     rows = cur.fetchall()
     conn.close()
     return jsonify(rows), 200
+
+@app.route("/api/scraping/categoria/<categoria>", methods=["POST"])
+def ejecutar_scraping_categoria(categoria):
+    """Ejecuta scraping para una categoría específica"""
+    try:
+        # Importar funciones de scraping
+        from scraper import scrape_por_categoria
+        
+        # Ejecutar scraping en un hilo separado
+        def scraping_thread():
+            scrape_por_categoria(categoria)
+        
+        thread = threading.Thread(target=scraping_thread)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            "mensaje": f"Scraping iniciado para categoría: {categoria}",
+            "categoria": categoria
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Error al iniciar scraping: {str(e)}"}), 500
+
+@app.route("/api/scraping/todos", methods=["POST"])
+def ejecutar_scraping_todos():
+    """Ejecuta scraping para todas las categorías"""
+    try:
+        # Importar funciones de scraping
+        from scraper import scrape_por_categoria
+        
+        # Ejecutar scraping en un hilo separado
+        def scraping_thread():
+            scrape_por_categoria()
+        
+        thread = threading.Thread(target=scraping_thread)
+        thread.daemon = True
+        thread.start()
+        
+        return jsonify({
+            "mensaje": "Scraping iniciado para todas las categorías",
+            "categoria": "todos"
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Error al iniciar scraping: {str(e)}"}), 500
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":

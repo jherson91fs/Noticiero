@@ -38,7 +38,8 @@ function crearNodoNoticia(n, viewType = currentView) {
     const meta = `<div class="meta"><strong>Fuente:</strong> ${n.fuente || ''} · <strong>Fecha:</strong> ${formatDate(n.fecha)}</div>`;
     const img = n.imagen ? `<img src="${n.imagen}" alt="Imagen de noticia" class="news-image" data-src="${n.imagen}">` : '';
     const tipoTag = n.tipo ? `<span class="tag tipo-tag">${n.tipo}</span>` : '';
-    const categoriaTag = n.categoria ? `<span class="tag categoria-tag">${n.categoria}</span>` : '';
+    const categoriaTag = n.categoria ? `<span class="tag categoria-tag ${n.categoria}">${n.categoria.charAt(0).toUpperCase() + n.categoria.slice(1)}</span>` : '';
+    const departamentoTag = n.departamento ? `<span class="tag departamento-tag">${n.departamento.charAt(0).toUpperCase() + n.departamento.slice(1).replace('-', ' ')}</span>` : '';
     const isFav = isFavorito(n.id) ? 'active' : '';
     
     if (viewType === 'list') {
@@ -56,6 +57,7 @@ function crearNodoNoticia(n, viewType = currentView) {
                     <div class="tags">
                         ${tipoTag}
                         ${categoriaTag}
+                        ${departamentoTag}
                     </div>
                     <p>${n.resumen || ''}</p>
                     <div class="actions">
@@ -488,9 +490,11 @@ function printNews() {
 // ========== POBLAR FILTROS ==========
 function poblarFiltros() {
     const selFuente = document.getElementById('filtro-fuente');
-    const selCategoria = document.getElementById('filtro-categoria');
+    const selCategoriaPrincipal = document.getElementById('filtro-categoria-principal');
     const selTipo = document.getElementById('filtro-tipo');
-    if (!selFuente || !selCategoria) return;
+    const selDepartamento = document.getElementById('filtro-departamento');
+    if (!selFuente) return;
+    
     fetch('/api/meta')
         .then(r => r.json())
         .then(meta => {
@@ -503,15 +507,6 @@ function poblarFiltros() {
                     selFuente.appendChild(opt);
                 });
             }
-            if (meta.categorias) {
-                selCategoria.length = 1;
-                meta.categorias.forEach(c => {
-                    const opt = document.createElement('option');
-                    opt.value = c;
-                    opt.textContent = c;
-                    selCategoria.appendChild(opt);
-                });
-            }
             if (selTipo && meta.tipos) {
                 selTipo.length = 1;
                 meta.tipos.forEach(t => {
@@ -519,6 +514,15 @@ function poblarFiltros() {
                     opt.value = t;
                     opt.textContent = t;
                     selTipo.appendChild(opt);
+                });
+            }
+            if (selDepartamento && meta.departamentos) {
+                selDepartamento.length = 1;
+                meta.departamentos.forEach(d => {
+                    const opt = document.createElement('option');
+                    opt.value = d;
+                    opt.textContent = d.charAt(0).toUpperCase() + d.slice(1).replace('-', ' ');
+                    selDepartamento.appendChild(opt);
                 });
             }
         })
@@ -552,6 +556,7 @@ function cargarDetalle() {
                     <div class="tags">
                         ${tipoTag}
                         ${categoriaTag}
+                        ${departamentoTag}
                     </div>
                     ${img}
                     <p>${n.resumen || ''}</p>
@@ -637,12 +642,20 @@ function renderFavoritos() {
             );
         }
         
-        // Filtro de fecha
+        // Filtro de fecha (comparar como fechas reales)
         if (fechaDesde) {
-            filteredItems = filteredItems.filter(n => n.fecha >= fechaDesde);
+            const desde = new Date(fechaDesde);
+            filteredItems = filteredItems.filter(n => {
+                const f = n && n.fecha ? new Date(n.fecha) : null;
+                return f ? f >= desde : false;
+            });
         }
         if (fechaHasta) {
-            filteredItems = filteredItems.filter(n => n.fecha <= fechaHasta);
+            const hasta = new Date(fechaHasta);
+            filteredItems = filteredItems.filter(n => {
+                const f = n && n.fecha ? new Date(n.fecha) : null;
+                return f ? f <= hasta : false;
+            });
         }
         
         // Ordenamiento
@@ -750,8 +763,9 @@ document.addEventListener('DOMContentLoaded', function() {
         btnFiltrar.addEventListener('click', () => {
             const filtros = {
                 fuente: document.getElementById('filtro-fuente')?.value,
-                categoria: document.getElementById('filtro-categoria')?.value,
+                categoria: document.getElementById('filtro-categoria-principal')?.value,
                 tipo: document.getElementById('filtro-tipo')?.value,
+                departamento: document.getElementById('filtro-departamento')?.value,
                 q: document.getElementById('busqueda')?.value,
                 fecha_desde: document.getElementById('fecha-desde')?.value,
                 fecha_hasta: document.getElementById('fecha-hasta')?.value,
@@ -768,8 +782,9 @@ document.addEventListener('DOMContentLoaded', function() {
             const filtros = {
                 q: busqueda.value,
                 fuente: document.getElementById('filtro-fuente')?.value,
-                categoria: document.getElementById('filtro-categoria')?.value,
+                categoria: document.getElementById('filtro-categoria-principal')?.value,
                 tipo: document.getElementById('filtro-tipo')?.value,
+                departamento: document.getElementById('filtro-departamento')?.value,
                 fecha_desde: document.getElementById('fecha-desde')?.value,
                 fecha_hasta: document.getElementById('fecha-hasta')?.value,
                 ordenar: document.getElementById('ordenar')?.value
@@ -794,8 +809,9 @@ document.addEventListener('DOMContentLoaded', function() {
     if (btnLimpiar) {
         btnLimpiar.addEventListener('click', () => {
             document.getElementById('filtro-fuente').value = '';
-            document.getElementById('filtro-categoria').value = '';
+            document.getElementById('filtro-categoria-principal').value = '';
             document.getElementById('filtro-tipo').value = '';
+            document.getElementById('filtro-departamento').value = '';
             document.getElementById('busqueda').value = '';
             document.getElementById('fecha-desde').value = '';
             document.getElementById('fecha-hasta').value = '';
