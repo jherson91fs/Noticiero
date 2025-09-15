@@ -637,12 +637,20 @@ function renderFavoritos() {
             );
         }
         
-        // Filtro de fecha
+        // Filtro de fecha (comparar como fechas reales)
         if (fechaDesde) {
-            filteredItems = filteredItems.filter(n => n.fecha >= fechaDesde);
+            const desde = new Date(fechaDesde);
+            filteredItems = filteredItems.filter(n => {
+                const f = n && n.fecha ? new Date(n.fecha) : null;
+                return f ? f >= desde : false;
+            });
         }
         if (fechaHasta) {
-            filteredItems = filteredItems.filter(n => n.fecha <= fechaHasta);
+            const hasta = new Date(fechaHasta);
+            filteredItems = filteredItems.filter(n => {
+                const f = n && n.fecha ? new Date(n.fecha) : null;
+                return f ? f <= hasta : false;
+            });
         }
         
         // Ordenamiento

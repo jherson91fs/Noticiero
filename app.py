@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 import requests
 from urllib.parse import urljoin
 from sources import FUENTES
+import re
 
 # ---------------- FLASK ----------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -23,6 +24,14 @@ DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_NAME = os.getenv("DB_NAME", "noticiero_db")
 
+# Sanitizar el nombre de la base de datos para evitar inyección en DDL
+def _sanitize_db_name(db_name):
+    # Permitir solo letras, números y guiones bajos
+    clean = re.sub(r"[^0-9A-Za-z_]", "", db_name or "")
+    return clean or "noticiero_db"
+
+DB_NAME = _sanitize_db_name(DB_NAME)
+
 def crear_base_y_tabla():
     try:
         conn = mysql.connector.connect(
@@ -31,8 +40,8 @@ def crear_base_y_tabla():
             password=DB_PASSWORD
         )
         cursor = conn.cursor()
-        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_NAME} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
-        cursor.execute(f"USE {DB_NAME};")
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;")
+        cursor.execute(f"USE `{DB_NAME}`;")
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS noticias (
                 id INT AUTO_INCREMENT PRIMARY KEY,

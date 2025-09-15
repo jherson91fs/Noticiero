@@ -60,16 +60,4 @@ FUENTES = [
     "category_selector": "div.post-category a"        # categoría editorial
     },
 
-    {
-    "url": "https://diariosinfronteras.com.pe",
-    "fuente": "Diario Sin Fronteras",
-    "base": "https://diariosinfronteras.com.pe",
-    "container": "div.post",   # cada bloque de noticia
-    "title_selector": "h3.entry-title a",
-    "img_selector": "div.ws-thumbnail img",
-    "summary_selector": "div.post-excerpt",
-    "author_selector": "div.post-author-bd a",
-    "date_selector": "div.post-date-bd span",
-    "category_selector": "div.post-category a",  # captura categoría editorial (Noticias, Deportes, etc.)
-    },
 ]
