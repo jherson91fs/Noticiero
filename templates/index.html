@@ -19,24 +19,48 @@
 
     <section id="filtros">
         <div class="container">
-            <input type="text" id="busqueda" placeholder="Buscar noticia...">
-            <select id="filtro-fuente">
-                <option value="">Todas las fuentes</option>
-                <option value="BBC Mundo">BBC Mundo</option>
-                <option value="RPP Noticias">RPP Noticias</option>
-                <option value="El Comercio">El Comercio</option>
-                <option value="Perú21">Perú21</option>
-                <option value="La República">La República</option>
-            </select>
-            <select id="filtro-categoria">
-                <option value="">Todas las categorías</option>
-                <option value="Internacional">Internacional</option>
-                <option value="Nacional">Nacional</option>
-            </select>
-            <select id="filtro-tipo">
-                <option value="">Todos los tipos</option>
-            </select>
-            <button id="btn-filtrar">Filtrar</button>
+            <div class="filters-row">
+                <input type="text" id="busqueda" placeholder="Buscar noticia...">
+                <select id="filtro-fuente">
+                    <option value="">Todas las fuentes</option>
+                </select>
+                <select id="filtro-categoria">
+                    <option value="">Todas las categorías</option>
+                </select>
+                <select id="filtro-tipo">
+                    <option value="">Todos los tipos</option>
+                </select>
+                <button id="btn-filtrar">Filtrar</button>
+            </div>
+            
+            <div class="advanced-filters" id="advanced-filters" style="display: none;">
+                <div class="filter-group">
+                    <label>Fecha desde:</label>
+                    <input type="date" id="fecha-desde">
+                </div>
+                <div class="filter-group">
+                    <label>Fecha hasta:</label>
+                    <input type="date" id="fecha-hasta">
+                </div>
+                <div class="filter-group">
+                    <label>Ordenar por:</label>
+                    <select id="ordenar">
+                        <option value="fecha_desc">Fecha (más reciente)</option>
+                        <option value="fecha_asc">Fecha (más antiguo)</option>
+                        <option value="titulo_asc">Título (A-Z)</option>
+                        <option value="titulo_desc">Título (Z-A)</option>
+                    </select>
+                </div>
+                <button id="btn-limpiar-filtros">Limpiar</button>
+            </div>
+            
+            <div class="view-controls">
+                <button id="btn-advanced-filters" class="btn-secondary">Filtros Avanzados</button>
+                <div class="view-toggle">
+                    <button id="btn-grid-view" class="view-btn active" title="Vista de cuadrícula">⊞</button>
+                    <button id="btn-list-view" class="view-btn" title="Vista de lista">☰</button>
+                </div>
+            </div>
         </div>
     </section>
 
@@ -44,8 +68,34 @@
         <section id="noticias" class="container">
             <!-- Noticias se cargarán aquí -->
         </section>
+        
+        <div class="pagination-info">
+            <span id="pagination-text">Cargando...</span>
+        </div>
+        
         <div class="actions">
-            <button id="btn-cargar-mas">Cargar más</button>
+            <button id="btn-cargar-mas" style="display: none;">Cargar más</button>
+            <div id="pagination-controls" style="display: none;">
+                <button id="btn-prev" class="btn-pagination">← Anterior</button>
+                <span id="page-numbers"></span>
+                <button id="btn-next" class="btn-pagination">Siguiente →</button>
+            </div>
+        </div>
+        
+        <!-- Modal para vista previa -->
+        <div id="preview-modal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <div id="preview-content"></div>
+            </div>
+        </div>
+        
+        <!-- Modal para imágenes ampliables -->
+        <div id="image-modal" class="modal">
+            <div class="modal-content image-modal-content">
+                <span class="close">&times;</span>
+                <img id="modal-image" src="" alt="">
+            </div>
         </div>
     </main>
 

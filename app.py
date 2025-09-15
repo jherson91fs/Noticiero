@@ -301,6 +301,9 @@ def listar_noticias():
     fuente = request.args.get("fuente")
     categoria = request.args.get("categoria")
     tipo = request.args.get("tipo")
+    fecha_desde = request.args.get("fecha_desde")
+    fecha_hasta = request.args.get("fecha_hasta")
+    ordenar = request.args.get("ordenar", "fecha_desc")  # fecha_desc, fecha_asc, titulo_asc, titulo_desc
 
     conn = get_connection()
     if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
@@ -319,13 +322,67 @@ def listar_noticias():
     if tipo:
         base_query += " AND tipo = %s"
         params.append(tipo)
-    base_query += " ORDER BY fecha DESC LIMIT %s OFFSET %s"
+    if fecha_desde:
+        base_query += " AND fecha >= %s"
+        params.append(fecha_desde)
+    if fecha_hasta:
+        base_query += " AND fecha <= %s"
+        params.append(fecha_hasta)
+    
+    # Ordenamiento
+    order_clause = "ORDER BY "
+    if ordenar == "fecha_asc":
+        order_clause += "fecha ASC"
+    elif ordenar == "titulo_asc":
+        order_clause += "titulo ASC"
+    elif ordenar == "titulo_desc":
+        order_clause += "titulo DESC"
+    else:  # fecha_desc por defecto
+        order_clause += "fecha DESC"
+    
+    base_query += f" {order_clause} LIMIT %s OFFSET %s"
     params.extend([limit, offset])
     cursor.execute(base_query, tuple(params))
     rows = cursor.fetchall()
+    
+    # Contar total para paginación
+    count_query = "SELECT COUNT(*) as total FROM noticias WHERE 1=1"
+    count_params = []
+    count_query += " AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))"
+    if fuente:
+        count_query += " AND fuente = %s"
+        count_params.append(fuente)
+    if categoria:
+        count_query += " AND categoria = %s"
+        count_params.append(categoria)
+    if tipo:
+        count_query += " AND tipo = %s"
+        count_params.append(tipo)
+    if fecha_desde:
+        count_query += " AND fecha >= %s"
+        count_params.append(fecha_desde)
+    if fecha_hasta:
+        count_query += " AND fecha <= %s"
+        count_params.append(fecha_hasta)
+    
+    cursor.execute(count_query, tuple(count_params))
+    total = cursor.fetchone()["total"]
+    
     conn.close()
-    if not rows: return jsonify({"mensaje": "No hay noticias disponibles"}), 404
-    return jsonify(rows), 200
+    if not rows: return jsonify({"mensaje": "No hay noticias disponibles", "total": 0, "page": page, "total_pages": 0}), 404
+    
+    total_pages = (total + limit - 1) // limit
+    return jsonify({
+        "noticias": rows,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }), 200
 
 @app.route("/api/noticias/filtrar", methods=["GET"])
 def filtrar_noticias():
@@ -333,6 +390,9 @@ def filtrar_noticias():
     categoria = request.args.get("categoria")
     fecha = request.args.get("fecha")
     tipo = request.args.get("tipo")
+    fecha_desde = request.args.get("fecha_desde")
+    fecha_hasta = request.args.get("fecha_hasta")
+    ordenar = request.args.get("ordenar", "fecha_desc")
     page = int(request.args.get("page", 1))
     limit = int(request.args.get("limit", 10))
     offset = (page - 1) * limit
@@ -344,6 +404,8 @@ def filtrar_noticias():
     if categoria: query += " AND categoria = %s"; params.append(categoria)
     if fecha: query += " AND fecha = %s"; params.append(fecha)
     if tipo: query += " AND tipo = %s"; params.append(tipo)
+    if fecha_desde: query += " AND fecha >= %s"; params.append(fecha_desde)
+    if fecha_hasta: query += " AND fecha <= %s"; params.append(fecha_hasta)
     # Excluir Peru21 de forma global
     query += " AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))"
 
@@ -351,13 +413,52 @@ def filtrar_noticias():
     if not conn: return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
 
     cursor = conn.cursor(dictionary=True)
-    query += " ORDER BY fecha DESC LIMIT %s OFFSET %s"
+    
+    # Ordenamiento
+    order_clause = "ORDER BY "
+    if ordenar == "fecha_asc":
+        order_clause += "fecha ASC"
+    elif ordenar == "titulo_asc":
+        order_clause += "titulo ASC"
+    elif ordenar == "titulo_desc":
+        order_clause += "titulo DESC"
+    else:  # fecha_desc por defecto
+        order_clause += "fecha DESC"
+    
+    query += f" {order_clause} LIMIT %s OFFSET %s"
     params.extend([limit, offset])
     cursor.execute(query, tuple(params))
     rows = cursor.fetchall()
+    
+    # Contar total para paginación
+    count_query = "SELECT COUNT(*) as total FROM noticias WHERE 1=1"
+    count_params = []
+    if fuente: count_query += " AND fuente = %s"; count_params.append(fuente)
+    if categoria: count_query += " AND categoria = %s"; count_params.append(categoria)
+    if fecha: count_query += " AND fecha = %s"; count_params.append(fecha)
+    if tipo: count_query += " AND tipo = %s"; count_params.append(tipo)
+    if fecha_desde: count_query += " AND fecha >= %s"; count_params.append(fecha_desde)
+    if fecha_hasta: count_query += " AND fecha <= %s"; count_params.append(fecha_hasta)
+    count_query += " AND (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21'))"
+    
+    cursor.execute(count_query, tuple(count_params))
+    total = cursor.fetchone()["total"]
+    
     conn.close()
-    if not rows: return jsonify({"mensaje": "No se encontraron noticias con esos filtros"}), 404
-    return jsonify(rows), 200
+    if not rows: return jsonify({"mensaje": "No se encontraron noticias con esos filtros", "total": 0, "page": page, "total_pages": 0}), 404
+    
+    total_pages = (total + limit - 1) // limit
+    return jsonify({
+        "noticias": rows,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }), 200
 
 @app.route("/api/noticias/<int:noticia_id>", methods=["GET"])
 def noticia_por_id(noticia_id):
@@ -383,12 +484,45 @@ def buscar_noticias():
     page = int(request.args.get("page", 1))
     limit = int(request.args.get("limit", 10))
     offset = (page - 1) * limit
-    query = "SELECT * FROM noticias WHERE (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21')) AND (titulo LIKE %s OR resumen LIKE %s) ORDER BY fecha DESC LIMIT %s OFFSET %s"
+    ordenar = request.args.get("ordenar", "fecha_desc")
+    
+    query = "SELECT * FROM noticias WHERE (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21')) AND (titulo LIKE %s OR resumen LIKE %s)"
+    
+    # Ordenamiento
+    order_clause = "ORDER BY "
+    if ordenar == "fecha_asc":
+        order_clause += "fecha ASC"
+    elif ordenar == "titulo_asc":
+        order_clause += "titulo ASC"
+    elif ordenar == "titulo_desc":
+        order_clause += "titulo DESC"
+    else:  # fecha_desc por defecto
+        order_clause += "fecha DESC"
+    
+    query += f" {order_clause} LIMIT %s OFFSET %s"
     cursor.execute(query, (f"%{keyword}%", f"%{keyword}%", limit, offset))
     rows = cursor.fetchall()
+    
+    # Contar total para paginación
+    count_query = "SELECT COUNT(*) as total FROM noticias WHERE (fuente IS NULL OR fuente NOT IN ('Perú21','Peru21')) AND (titulo LIKE %s OR resumen LIKE %s)"
+    cursor.execute(count_query, (f"%{keyword}%", f"%{keyword}%"))
+    total = cursor.fetchone()["total"]
+    
     conn.close()
-    if not rows: return jsonify({"mensaje": "No se encontraron noticias con esa búsqueda"}), 404
-    return jsonify(rows), 200
+    if not rows: return jsonify({"mensaje": "No se encontraron noticias con esa búsqueda", "total": 0, "page": page, "total_pages": 0}), 404
+    
+    total_pages = (total + limit - 1) // limit
+    return jsonify({
+        "noticias": rows,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "total_pages": total_pages,
+            "has_next": page < total_pages,
+            "has_prev": page > 1
+        }
+    }), 200
 
 @app.route("/api/meta", methods=["GET"])
 def meta_info():

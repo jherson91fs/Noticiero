@@ -19,18 +19,45 @@
 
     <main>
         <section class="container">
-            <div class="actions" style="justify-content: space-between; gap: 12px;">
-                <div>
+            <div class="favorites-controls">
+                <div class="actions">
                     <button id="btn-exportar">Exportar JSON</button>
                     <button id="btn-limpiar">Limpiar favoritos</button>
+                    <button id="btn-add-folder" class="btn-secondary">+ Nueva Carpeta</button>
                 </div>
-                <div>
+                
+                <div class="favorites-filters">
                     <input id="fav-busqueda" type="text" placeholder="Buscar en favoritos..." />
+                    <select id="fav-folder-filter">
+                        <option value="">Todas las carpetas</option>
+                    </select>
+                    <input type="date" id="fav-fecha-desde" placeholder="Desde">
+                    <input type="date" id="fav-fecha-hasta" placeholder="Hasta">
+                    <select id="fav-ordenar">
+                        <option value="fecha_desc">Más recientes</option>
+                        <option value="fecha_asc">Más antiguos</option>
+                        <option value="titulo_asc">Título A-Z</option>
+                        <option value="titulo_desc">Título Z-A</option>
+                    </select>
                 </div>
             </div>
+            
             <section id="lista-favoritos" class="container" style="padding-top:0;"></section>
         </section>
     </main>
+    
+    <!-- Modal para crear/editar carpetas -->
+    <div id="folder-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h3>Gestionar Carpetas</h3>
+            <div id="folder-list"></div>
+            <div class="folder-form">
+                <input type="text" id="new-folder-name" placeholder="Nombre de la carpeta">
+                <button id="btn-create-folder">Crear</button>
+            </div>
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     <script>

@@ -28,9 +28,34 @@
                     <h3>Relacionadas</h3>
                     <div id="relacionadas-list" class="related-grid"></div>
                 </div>
+                
+                <div class="panel reading-controls">
+                    <h3>Modo Lectura</h3>
+                    <div class="control-group">
+                        <label>Tamaño de fuente:</label>
+                        <div class="font-size-controls">
+                            <button id="font-smaller">A-</button>
+                            <span id="font-size-display">Normal</span>
+                            <button id="font-larger">A+</button>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <button id="btn-reading-mode" class="btn-secondary">Modo Lectura</button>
+                        <button id="btn-print" class="btn-secondary">Imprimir</button>
+                        <button id="btn-audio" class="btn-secondary">🔊 Audio</button>
+                    </div>
+                </div>
             </aside>
         </div>
     </main>
+    
+    <!-- Modal para imágenes ampliables -->
+    <div id="image-modal" class="modal">
+        <div class="modal-content image-modal-content">
+            <span class="close">&times;</span>
+            <img id="modal-image" src="" alt="">
+        </div>
+    </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
     </body>
