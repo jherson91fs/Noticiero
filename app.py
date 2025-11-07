@@ -581,10 +581,17 @@ def meta_info():
     categorias = [row[0] for row in cursor.fetchall()]
     cursor.execute("SELECT DISTINCT tipo FROM noticias WHERE tipo IS NOT NULL AND tipo <> ''")
     tipos = [row[0] for row in cursor.fetchall()]
+    # Obtener departamentos de la BD
     cursor.execute("SELECT DISTINCT departamento FROM noticias WHERE departamento IS NOT NULL AND departamento <> ''")
-    departamentos = [row[0] for row in cursor.fetchall()]
+    departamentos_db = [row[0] for row in cursor.fetchall()]
+    
+    # Obtener todos los departamentos del Perú desde sources.py
+    from sources import DEPARTAMENTOS
+    # Combinar departamentos de BD con todos los disponibles
+    todos_departamentos = sorted(list(set(departamentos_db + DEPARTAMENTOS)))
+    
     conn.close()
-    return jsonify({"fuentes": fuentes, "categorias": categorias, "tipos": tipos, "departamentos": departamentos}), 200
+    return jsonify({"fuentes": fuentes, "categorias": categorias, "tipos": tipos, "departamentos": todos_departamentos}), 200
 
 @app.route("/api/categorias", methods=["GET"])
 def listar_categorias():
@@ -805,6 +812,78 @@ def ejecutar_scraping_todos():
         
     except Exception as e:
         return jsonify({"error": f"Error al iniciar scraping: {str(e)}"}), 500
+
+# ---------------- REDES SOCIALES ----------------
+@app.route("/api/social/buscar", methods=["GET"])
+def buscar_redes_sociales():
+    """Busca contenido en redes sociales"""
+    query = request.args.get("q")
+    platforms = request.args.get("platforms", "twitter,facebook,instagram").split(",")
+    limit = int(request.args.get("limit", 10))
+    
+    if not query:
+        return jsonify({"error": "Debe proporcionar un parámetro ?q=busqueda"}), 400
+    
+    try:
+        from social_media import buscar_redes_sociales as buscar_social
+        resultados = buscar_social(query, platforms, limit)
+        return jsonify(resultados), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al buscar en redes sociales: {str(e)}"}), 500
+
+@app.route("/api/social/noticia/<int:noticia_id>", methods=["GET"])
+def redes_sociales_por_noticia(noticia_id):
+    """Obtiene contenido de redes sociales relacionado con una noticia"""
+    conn = get_connection()
+    if not conn:
+        return jsonify({"error": "No se pudo conectar a la base de datos"}), 500
+    
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT titulo, departamento, categoria FROM noticias WHERE id = %s", (noticia_id,))
+    noticia = cursor.fetchone()
+    conn.close()
+    
+    if not noticia:
+        return jsonify({"error": "Noticia no encontrada"}), 404
+    
+    try:
+        from social_media import buscar_redes_sociales_por_noticia
+        resultados = buscar_redes_sociales_por_noticia(
+            noticia["titulo"],
+            noticia.get("departamento"),
+            noticia.get("categoria")
+        )
+        return jsonify(resultados), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al buscar en redes sociales: {str(e)}"}), 500
+
+@app.route("/api/social/compartir", methods=["GET"])
+def generar_links_compartir():
+    """Genera links para compartir en redes sociales"""
+    texto = request.args.get("texto", "")
+    url = request.args.get("url", "")
+    
+    if not url:
+        return jsonify({"error": "Debe proporcionar un parámetro ?url="}), 400
+    
+    try:
+        from social_media import (
+            generar_link_compartir_twitter,
+            generar_link_compartir_facebook,
+            generar_link_compartir_whatsapp,
+            generar_link_compartir_telegram
+        )
+        
+        links = {
+            "twitter": generar_link_compartir_twitter(texto, url),
+            "facebook": generar_link_compartir_facebook(url),
+            "whatsapp": generar_link_compartir_whatsapp(texto, url),
+            "telegram": generar_link_compartir_telegram(texto, url)
+        }
+        
+        return jsonify({"links": links}), 200
+    except Exception as e:
+        return jsonify({"error": f"Error al generar links: {str(e)}"}), 500
 
 # ---------------- MAIN ----------------
 if __name__ == "__main__":

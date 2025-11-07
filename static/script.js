@@ -547,45 +547,55 @@ function cargarDetalle() {
             const meta = `<div class="meta"><strong>Fuente:</strong> ${n.fuente || ''} · <strong>Fecha:</strong> ${formatDate(n.fecha)}</div>`;
             const img = n.imagen ? `<img src="${n.imagen}" alt="Imagen de noticia" class="news-image" data-src="${n.imagen}">` : '';
             const tipoTag = n.tipo ? `<span class="tag tipo-tag">${n.tipo}</span>` : '';
-            const categoriaTag = n.categoria ? `<span class="tag categoria-tag">${n.categoria}</span>` : '';
+            const categoriaTag = n.categoria ? `<span class="tag categoria-tag ${n.categoria}">${n.categoria.charAt(0).toUpperCase() + n.categoria.slice(1)}</span>` : '';
+            const departamentoTag = n.departamento ? `<span class="tag departamento-tag">${n.departamento.charAt(0).toUpperCase() + n.departamento.slice(1).replace('-', ' ')}</span>` : '';
             
             cont.innerHTML = `
                 <article class="noticia">
                     <h2>${n.titulo}</h2>
                     ${meta}
                     <div class="tags">
-                        ${tipoTag}
                         ${categoriaTag}
                         ${departamentoTag}
+                        ${tipoTag}
                     </div>
                     ${img}
-                    <p>${n.resumen || ''}</p>
+                    ${n.resumen ? `<div class="resumen"><p>${n.resumen}</p></div>` : ''}
+                    ${n.autor ? `<div class="autor"><strong>Autor:</strong> ${n.autor}</div>` : ''}
                     <div class="actions">
                         <button id="btn-fav" data-id="${n.id}">${isFavorito(n.id) ? '★ Guardado' : '⭐ Guardar'}</button>
-                        <button id="btn-share" data-title="${n.titulo}" data-url="/noticia?id=${n.id}">Compartir</button>
-                        <a href="${n.link}" target="_blank" rel="noopener">Ver fuente original ↗</a>
+                        <div class="share-buttons" id="share-buttons">
+                            <button class="btn-share-twitter" data-title="${n.titulo}" data-url="${window.location.href}">🐦 Twitter</button>
+                            <button class="btn-share-facebook" data-url="${window.location.href}">📘 Facebook</button>
+                            <button class="btn-share-whatsapp" data-title="${n.titulo}" data-url="${window.location.href}">💬 WhatsApp</button>
+                            <button class="btn-share-telegram" data-title="${n.titulo}" data-url="${window.location.href}">✈️ Telegram</button>
+                        </div>
+                        <a href="${n.link}" target="_blank" rel="noopener" class="btn-link">Ver fuente original ↗</a>
+                    </div>
+                    <div id="social-media-content" class="social-media-section">
+                        <h3>📱 En Redes Sociales</h3>
+                        <div id="social-posts" class="social-posts"></div>
                     </div>
                 </article>
             `;
             
             // Event listeners para detalle
             const btnFav = document.getElementById('btn-fav');
-            const btnShare = document.getElementById('btn-share');
             const image = cont.querySelector('.news-image');
             
             if (btnFav) {
                 btnFav.addEventListener('click', () => toggleFavorito(n.id, btnFav));
             }
             
-            if (btnShare) {
-                btnShare.addEventListener('click', () => shareNews(btnShare.dataset.title, btnShare.dataset.url));
-            }
+            // Configurar botones de compartir
+            setupShareButtons(n.titulo, window.location.href);
             
             if (image) {
                 image.addEventListener('click', () => showImageModal(image.src));
             }
             
             cargarRelacionadas(n.id);
+            cargarRedesSociales(n.id);
         });
 }
 
@@ -604,6 +614,120 @@ function cargarRelacionadas(id) {
                 box.appendChild(d);
             });
         });
+}
+
+function setupShareButtons(titulo, url) {
+    // Configurar botones de compartir
+    const btnTwitter = document.querySelector('.btn-share-twitter');
+    const btnFacebook = document.querySelector('.btn-share-facebook');
+    const btnWhatsApp = document.querySelector('.btn-share-whatsapp');
+    const btnTelegram = document.querySelector('.btn-share-telegram');
+    
+    if (btnTwitter) {
+        btnTwitter.addEventListener('click', () => {
+            const texto = btnTwitter.dataset.title || titulo;
+            const linkUrl = btnTwitter.dataset.url || url;
+            const shareUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(texto)}&url=${encodeURIComponent(linkUrl)}`;
+            window.open(shareUrl, '_blank', 'width=550,height=420');
+        });
+    }
+    
+    if (btnFacebook) {
+        btnFacebook.addEventListener('click', () => {
+            const linkUrl = btnFacebook.dataset.url || url;
+            const shareUrl = `https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(linkUrl)}`;
+            window.open(shareUrl, '_blank', 'width=550,height=420');
+        });
+    }
+    
+    if (btnWhatsApp) {
+        btnWhatsApp.addEventListener('click', () => {
+            const texto = btnWhatsApp.dataset.title || titulo;
+            const linkUrl = btnWhatsApp.dataset.url || url;
+            const shareUrl = `https://wa.me/?text=${encodeURIComponent(texto + ' ' + linkUrl)}`;
+            window.open(shareUrl, '_blank');
+        });
+    }
+    
+    if (btnTelegram) {
+        btnTelegram.addEventListener('click', () => {
+            const texto = btnTelegram.dataset.title || titulo;
+            const linkUrl = btnTelegram.dataset.url || url;
+            const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(linkUrl)}&text=${encodeURIComponent(texto)}`;
+            window.open(shareUrl, '_blank');
+        });
+    }
+}
+
+function cargarRedesSociales(noticiaId) {
+    const container = document.getElementById('social-posts');
+    if (!container) return;
+    
+    container.innerHTML = '<p>Cargando contenido de redes sociales...</p>';
+    
+    fetch(`/api/social/noticia/${noticiaId}`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                container.innerHTML = `<p class="error">${data.error}</p>`;
+                return;
+            }
+            
+            container.innerHTML = '';
+            const results = data.results || {};
+            
+            if (Object.keys(results).length === 0) {
+                container.innerHTML = '<p>No se encontró contenido relacionado en redes sociales.</p>';
+                return;
+            }
+            
+            // Mostrar resultados por plataforma
+            Object.keys(results).forEach(platform => {
+                const posts = results[platform] || [];
+                if (posts.length === 0) return;
+                
+                const platformDiv = document.createElement('div');
+                platformDiv.className = `social-platform ${platform}`;
+                
+                const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
+                platformDiv.innerHTML = `<h4>${getPlatformIcon(platform)} ${platformName}</h4>`;
+                
+                const postsList = document.createElement('div');
+                postsList.className = 'social-posts-list';
+                
+                posts.forEach(post => {
+                    const postDiv = document.createElement('div');
+                    postDiv.className = 'social-post';
+                    postDiv.innerHTML = `
+                        <div class="social-post-header">
+                            <strong>${post.author || 'Usuario'}</strong>
+                            ${post.timestamp ? `<span class="social-timestamp">${formatDate(post.timestamp)}</span>` : ''}
+                        </div>
+                        <div class="social-post-text">${post.text || ''}</div>
+                        ${post.link ? `<a href="${post.link}" target="_blank" rel="noopener" class="social-link">Ver en ${platformName} →</a>` : ''}
+                        ${post.image ? `<img src="${post.image}" alt="Imagen" class="social-image">` : ''}
+                    `;
+                    postsList.appendChild(postDiv);
+                });
+                
+                platformDiv.appendChild(postsList);
+                container.appendChild(platformDiv);
+            });
+        })
+        .catch(err => {
+            container.innerHTML = `<p class="error">Error al cargar contenido de redes sociales: ${err.message}</p>`;
+        });
+}
+
+function getPlatformIcon(platform) {
+    const icons = {
+        'twitter': '🐦',
+        'facebook': '📘',
+        'instagram': '📷',
+        'whatsapp': '💬',
+        'telegram': '✈️'
+    };
+    return icons[platform] || '📱';
 }
 
 // ========== RENDERIZAR FAVORITOS ==========
