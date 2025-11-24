@@ -307,29 +307,51 @@ function closeModal(modalId) {
 }
 
 // ========== FAVORITOS ==========
+function normalizeFavoritoId(id) {
+    const num = Number(id);
+    return Number.isFinite(num) ? num : null;
+}
+
+function uniqueFavoritos(ids = []) {
+    const result = [];
+    ids.forEach(id => {
+        const normalized = normalizeFavoritoId(id);
+        if (normalized !== null && !result.includes(normalized)) {
+            result.push(normalized);
+        }
+    });
+    return result;
+}
+
 function getFavoritos() {
-    return JSON.parse(localStorage.getItem('favoritos') || '[]');
+    const raw = JSON.parse(localStorage.getItem('favoritos') || '[]');
+    return uniqueFavoritos(raw);
 }
 
 function setFavoritos(arr) {
-    localStorage.setItem('favoritos', JSON.stringify(arr));
+    localStorage.setItem('favoritos', JSON.stringify(uniqueFavoritos(arr)));
 }
 
 function isFavorito(id) {
-    return getFavoritos().includes(id);
+    const normalized = normalizeFavoritoId(id);
+    return normalized !== null && getFavoritos().includes(normalized);
 }
 
 function addFavorito(id) {
+    const normalized = normalizeFavoritoId(id);
+    if (normalized === null) return;
     const favs = getFavoritos();
-    if (!favs.includes(id)) {
-        favs.push(id);
+    if (!favs.includes(normalized)) {
+        favs.push(normalized);
         setFavoritos(favs);
     }
 }
 
 function removeFavorito(id) {
+    const normalized = normalizeFavoritoId(id);
+    if (normalized === null) return;
     const favs = getFavoritos();
-    const index = favs.indexOf(id);
+    const index = favs.indexOf(normalized);
     if (index > -1) {
         favs.splice(index, 1);
         setFavoritos(favs);
@@ -337,12 +359,14 @@ function removeFavorito(id) {
 }
 
 function toggleFavorito(id, button) {
-    if (isFavorito(id)) {
-        removeFavorito(id);
+    const normalized = normalizeFavoritoId(id);
+    if (normalized === null) return;
+    if (isFavorito(normalized)) {
+        removeFavorito(normalized);
         button.textContent = '⭐';
         button.classList.remove('active');
     } else {
-        addFavorito(id);
+        addFavorito(normalized);
         button.textContent = '★';
         button.classList.add('active');
     }
@@ -350,9 +374,10 @@ function toggleFavorito(id, button) {
 
 function bindFavButtons() {
     document.querySelectorAll('.bookmark-btn').forEach(btn => {
-        const id = Number(btn.getAttribute('data-id'));
-        btn.textContent = isFavorito(id) ? '★' : '⭐';
-        btn.classList.toggle('active', isFavorito(id));
+        const id = normalizeFavoritoId(btn.getAttribute('data-id'));
+        const activo = isFavorito(id);
+        btn.textContent = activo ? '★' : '⭐';
+        btn.classList.toggle('active', activo);
     });
 }
 
@@ -730,6 +755,35 @@ function getPlatformIcon(platform) {
     return icons[platform] || '📱';
 }
 
+function iniciarScrapeoDesdeUI(categoria, button) {
+    const originalText = button ? button.textContent : '';
+    if (button) {
+        button.disabled = true;
+        button.textContent = 'Iniciando...';
+        button.classList.add('loading');
+    }
+
+    const url = categoria ? `/api/scraping/categoria/${categoria}` : '/api/scraping/todos';
+
+    fetch(url, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            const mensaje = data?.mensaje || 'Scraping iniciado correctamente. Las noticias se actualizarán en breve.';
+            alert(mensaje);
+            cargarNoticias(currentFilters, false, true);
+        })
+        .catch(err => {
+            alert(`Error al iniciar el scraping: ${err.message}`);
+        })
+        .finally(() => {
+            if (button) {
+                button.disabled = false;
+                button.textContent = originalText || '🔄 Actualizar noticias';
+                button.classList.remove('loading');
+            }
+        });
+}
+
 // ========== RENDERIZAR FAVORITOS ==========
 function renderFavoritos() {
     const list = document.getElementById('lista-favoritos');
@@ -896,6 +950,15 @@ document.addEventListener('DOMContentLoaded', function() {
                 ordenar: document.getElementById('ordenar')?.value
             };
             cargarNoticias(filtros, false, true);
+        });
+    }
+    
+    // Botón para iniciar scraping
+    const btnScrape = document.getElementById('btn-scrape');
+    if (btnScrape) {
+        btnScrape.addEventListener('click', () => {
+            const categoria = document.getElementById('filtro-categoria-principal')?.value;
+            iniciarScrapeoDesdeUI(categoria, btnScrape);
         });
     }
     

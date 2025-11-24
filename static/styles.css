@@ -302,29 +302,85 @@ main {
 
 .noticia.list-view {
     grid-column: span 12;
-    display: flex;
-    gap: 16px;
+    padding: 22px;
+    border-left: 4px solid rgba(59, 130, 246, 0.6);
+    background: linear-gradient(125deg, rgba(59, 130, 246, 0.12), transparent);
 }
 
 .noticia.list-view .noticia-content {
-    display: flex;
-    gap: 16px;
-    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(180px, 260px) 1fr;
+    gap: 24px;
+    align-items: stretch;
 }
 
 .noticia.list-view .noticia-image {
-    flex: 0 0 200px;
-}
-
-.noticia.list-view .noticia-text {
-    flex: 1;
+    position: relative;
+    border-radius: calc(var(--radius) - 4px);
+    overflow: hidden;
+    min-height: 180px;
+    background: #0f172a;
 }
 
 .noticia.list-view .noticia-image img {
     width: 100%;
-    height: 120px;
+    height: 100%;
     object-fit: cover;
-    border-radius: 8px;
+    transition: transform 0.3s ease;
+}
+
+.noticia.list-view .noticia-image::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,0.45));
+    pointer-events: none;
+}
+
+.noticia.list-view .noticia-image:hover img {
+    transform: scale(1.03);
+}
+
+.noticia.list-view .noticia-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.noticia.list-view .noticia-header h2 {
+    font-size: 20px;
+    margin-bottom: 6px;
+}
+
+.noticia.list-view .noticia-text p {
+    margin: 6px 0 14px 0;
+    color: rgba(229, 231, 235, 0.9);
+    line-height: 1.6;
+}
+
+.noticia.list-view .noticia-text .tags {
+    margin-top: 6px;
+}
+
+.noticia.list-view .actions {
+    margin-top: auto;
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.noticia.list-view .actions .preview-btn,
+.noticia.list-view .actions .share-btn {
+    flex: 0 0 auto;
+    min-width: 140px;
+}
+
+@media (max-width: 900px) {
+    .noticia.list-view .noticia-content {
+        grid-template-columns: 1fr;
+    }
+    .noticia.list-view .noticia-image {
+        min-height: 160px;
+    }
 }
 
 .noticia:hover {

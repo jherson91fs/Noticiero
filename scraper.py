@@ -82,7 +82,7 @@ def scrape_fuente(fuente):
 
             # Clasificar la noticia automáticamente
             clasificacion = clasificar_noticia(titulo, resumen, fuente.get("categoria", "nacional"))
-            
+
             guardar_noticia(
                 titulo, link, clasificacion["categoria"], fecha, resumen, autor, imagen, fuente["fuente"], clasificacion["departamento"]
             )
