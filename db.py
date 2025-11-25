@@ -49,10 +49,10 @@ def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuen
 
         if not existe:
             cursor.execute("""
-                INSERT INTO noticias (titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento, fecha_scraping)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                INSERT INTO noticias (titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento, sentimiento, fecha_scraping)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
-                titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento, datetime.now()
+                titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento, sentimiento, datetime.now()
             ))
             conn.commit()
             print(f"✅ Noticia guardada: {titulo} [{departamento or 'nacional'}]")
@@ -182,6 +182,7 @@ def crear_tabla_si_no_existe():
                 imagen VARCHAR(1000),
                 fuente VARCHAR(100),
                 departamento VARCHAR(50),
+                sentimiento VARCHAR(20),
                 fecha_scraping TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE KEY unique_news (titulo, link)
             )
@@ -189,8 +190,11 @@ def crear_tabla_si_no_existe():
         
         # Agregar columna departamento si no existe (para bases de datos existentes)
         try:
+            cursor.execute("ALTER TABLE noticias ADD COLUMN sentimiento VARCHAR(20)")
+            print("✅ Columna 'sentimiento' agregada a la tabla noticias")
             cursor.execute("ALTER TABLE noticias ADD COLUMN departamento VARCHAR(50)")
             print("✅ Columna 'departamento' agregada a la tabla noticias")
+            
         except Error:
             # La columna ya existe, no hay problema
             pass

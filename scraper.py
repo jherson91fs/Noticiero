@@ -5,6 +5,7 @@ from db import guardar_noticia, crear_tabla_si_no_existe
 from sources import FUENTES, obtener_fuentes_por_categoria, obtener_categorias_disponibles, clasificar_noticia
 from urllib.parse import urljoin
 import sys
+import re
 
 
 # FUENTES importadas desde sources.py
@@ -57,6 +58,12 @@ def scrape_fuente(fuente):
                 el = item.select_one(fuente["selector_img"]) if hasattr(item, 'select_one') else None
                 if el:
                     imagen = el.get("src") or el.get("data-src") or el.get("data-img-url")
+                    # Parche para extraer URL de estilos css (ej: background:url('...'))
+            if imagen and "background" in imagen and "url" in imagen:
+                # Busca lo que está dentro de url('...') o url("...")
+                match = re.search(r"url\(['\"]?(.*?)['\"]?\)", imagen)
+                if match:
+                    imagen = match.group(1)
             if imagen:
                 imagen = urljoin(fuente["base"], imagen)
 
@@ -81,7 +88,12 @@ def scrape_fuente(fuente):
                     autor = aut_el.get_text(strip=True)
 
             # Clasificar la noticia automáticamente
-            clasificacion = clasificar_noticia(titulo, resumen, fuente.get("categoria", "nacional"))
+            clasificacion = clasificar_noticia(
+                titulo, 
+                resumen, 
+                fuente.get("categoria", "nacional"), 
+                fuente.get("departamento")  # <--- NUEVO ARGUMENTO
+            )
 
             guardar_noticia(
                 titulo, link, clasificacion["categoria"], fecha, resumen, autor, imagen, fuente["fuente"], clasificacion["departamento"]

@@ -11,7 +11,11 @@ import requests
 from urllib.parse import urljoin
 from sources import FUENTES, obtener_fuentes_por_categoria, obtener_categorias_disponibles, clasificar_noticia
 from db import crear_tabla_si_no_existe, obtener_departamentos_con_noticias, obtener_categorias_con_noticias
+from sentiment_analysis_spanish import sentiment_analysis
 import re
+import spacy
+
+sentiment_analyzer = sentiment_analysis.SentimentAnalysisSpanish()
 
 # ---------------- FLASK ----------------
 app = Flask(__name__, template_folder="templates", static_folder="static")
@@ -56,6 +60,7 @@ def crear_base_y_tabla():
                 imagen VARCHAR(500),
                 fuente VARCHAR(255),
                 departamento VARCHAR(50),
+                sentimiento VARCHAR(20),
                 fecha_scraping DATETIME,
                 UNIQUE KEY unique_link (link)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
@@ -84,6 +89,11 @@ def crear_base_y_tabla():
         except Exception:
             pass
         try:
+            cursor.execute("ALTER TABLE noticias ADD COLUMN sentimiento VARCHAR(20)")
+            print("✅ Columna 'sentimiento' agregada a la tabla noticias")
+        except Error:
+            pass # Ya existe
+        try:
             cursor.execute("CREATE INDEX idx_departamento ON noticias (departamento)")
         except Exception:
             pass
@@ -109,8 +119,34 @@ def get_connection():
     except Error as e:
         print(f"❌ Error en la conexión a DB: {e}")
         return None
+        
 
-def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento=None):
+# ---------------- NLP CONFIG ----------------
+print("🧠 Cargando modelo de lenguaje (esto demora un poco)...")
+try:
+    # Intentamos cargar el modelo mediano
+    nlp = spacy.load("es_core_news_md")
+    print("✅ Modelo NLP cargado.")
+except OSError:
+    print("⚠️ Modelo no encontrado. Descargando...")
+    from spacy.cli import download
+    download("es_core_news_md")
+    nlp = spacy.load("es_core_news_md")
+
+# Definimos los "conceptos base" contra los que compararemos las noticias
+# La IA calculará qué tanto se parece la noticia a estos grupos de palabras
+CATEGORIAS_NLP = {
+    "deporte": nlp("fútbol deportes partido goles selección peruana liga torneo copa mundial atleta olimpiadas"),
+    "economía": nlp("economía dólar inflación banco central bcr mercado financiero bolsa dinero precios inversión sbs"),
+    "política": nlp("congreso presidente gobierno ministros leyes elecciones democracia política fiscalía corrupción pleno ejecutivo legislativo"),
+    "policial": nlp("policía pnp crimen delito robo asesinato comisaría investigación detenidos operativo seguridad delincuencia"),
+    "tecnología": nlp("tecnología internet celular inteligencia artificial software app digital computadora ciencia espacio nasa"),
+    "espectáculos": nlp("farándula cine música concierto actor actriz celebridad hollywood televisión reality show"),
+    "salud": nlp("salud hospital médico enfermedad virus tratamiento vacuna minsa essalud emergencia paciente"),
+    "educación": nlp("educación colegio universidad clases escolares alumnos sunedu examen beca minedu")
+}
+
+def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento=None, sentimiento=None):
     conn = get_connection()
     if not conn:
         return False, "Error DB"
@@ -136,10 +172,15 @@ def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuen
             if not departamento:
                 departamento = clasificacion["departamento"]
         
+        texto_analisis = f"{titulo} {resumen or ''}"
+        sentimiento = analizar_sentimiento(texto_analisis)
+
         cursor.execute("""
-            INSERT INTO noticias (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, departamento, fecha_scraping)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (titulo, link, categoria, tipo, fecha, resumen, autor, imagen, fuente, departamento, fecha_scraping))
+                INSERT INTO noticias (titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento, sentimiento, fecha_scraping)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                titulo, link, categoria, fecha, resumen, autor, imagen, fuente, departamento, sentimiento, datetime.now()
+            ))  
         conn.commit()
         conn.close()
         return True, "Guardado"
@@ -148,22 +189,54 @@ def guardar_noticia(titulo, link, categoria, fecha, resumen, autor, imagen, fuen
         conn.close()
         return False, "Error DB"
 
+def analizar_sentimiento(texto):
+    """
+    Devuelve: 'positivo', 'negativo' o 'neutral' basado en el texto.
+    """
+    if not texto: return "neutral"
+    
+    # El analizador devuelve un número entre 0 (muy negativo) y 1 (muy positivo)
+    try:
+        score = sentiment_analyzer.sentiment(texto)
+        
+        if score > 0.6:
+            return "positivo"
+        elif score < 0.4:
+            return "negativo"
+        else:
+            return "neutral"
+    except:
+        return "neutral"
+
 # ---------------- CLASIFICACIÓN ----------------
 def clasificar_tipo(titulo, resumen, categoria, fuente):
-    texto = " ".join([str(x or "") for x in [titulo, resumen, categoria, fuente]]).lower()
-    reglas = [
-        ("deporte", ["deporte", "futbol", "fútbol", "liga", "partido", "gol", "selección", "mundial"]),
-        ("comedia", ["humor", "broma", "meme", "parodia", "satira", "sátira", "chiste"]),
-        ("economía", ["economía", "dólar", "inflación", "bcr", "mercado", "bolsa"]),
-        ("política", ["congreso", "presidente", "ministro", "política", "gobierno", "elecciones"]),
-        ("policial", ["policía", "pnp", "homicidio", "robo", "capturan", "detienen"]),
-        ("salud", ["salud", "hospital", "covid", "vacuna", "epidemia"]),
-        ("educación", ["educación", "universidad", "colegio", "estudiantes", "sunedu"]),
-    ]
-    for etiqueta, palabras in reglas:
-        if any(p in texto for p in palabras):
-            return etiqueta
-    return "informativo"
+    """
+    Versión INTELIGENTE: Usa NLP para entender el significado del texto
+    y no solo buscar palabras clave exactas.
+    """
+    # 1. Juntar todo el texto para darle contexto a la IA
+    texto_completo = f"{titulo} {resumen or ''} {categoria or ''}".lower()
+    
+    # 2. Procesar el texto con spaCy (crear vectores matemáticos)
+    doc_noticia = nlp(texto_completo)
+    
+    # 3. Comparar similitud con nuestras categorías base
+    mejor_categoria = "informativo" # Categoría por defecto
+    mayor_similitud = 0.0
+    
+    for etiqueta, doc_referencia in CATEGORIAS_NLP.items():
+        # .similarity() devuelve un puntaje de 0 a 1 (0% a 100% parecido)
+        similitud = doc_noticia.similarity(doc_referencia)
+        
+        # Si la similitud es decente (> 0.35) y es la más alta que hemos visto...
+        if similitud > 0.35 and similitud > mayor_similitud:
+            mayor_similitud = similitud
+            mejor_categoria = etiqueta
+            
+    # (Opcional) Imprimir para ver qué decide la IA en la consola
+    # print(f"🤖 {titulo[:15]}... -> {mejor_categoria} ({mayor_similitud:.2f})")
+    
+    return mejor_categoria
 
 def ultima_fecha_fuente(fuente):
     conn = get_connection()

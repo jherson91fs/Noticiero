@@ -1,6 +1,6 @@
 // ========== CONFIGURACIÓN GLOBAL ==========
 let page = 1;
-const limit = 15; // Máximo 15 noticias para infinite scroll
+const limit = 20; // Máximo 15 noticias para infinite scroll
 let currentView = 'grid'; // 'grid' o 'list'
 let currentFilters = {};
 let paginationData = {};
@@ -30,6 +30,42 @@ function formatDate(dateString) {
     });
 }
 
+// ========== PUBLICIDAD (NUEVO) ==========
+function crearNodoPublicidad(viewType = currentView) {
+    const div = document.createElement('div');
+    // Usamos la misma clase 'noticia' para heredar el tamaño y estilos del grid
+    div.className = `noticia publicidad ${viewType === 'list' ? 'list-view' : 'grid-view'}`;
+    
+    // Estilos en línea para diferenciarlo ligeramente (fondo gris claro, borde punteado)
+    div.innerHTML = `
+        <div style="
+            height: 100%; 
+            width: 100%; 
+            background-color: #f8f9fa; 
+            border: 2px dashed #ccc; 
+            border-radius: 8px; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            padding: 20px; 
+            text-align: center;
+            min-height: 300px;">
+            
+            <span style="font-size: 10px; font-weight: bold; color: #adb5bd; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 10px;">Publicidad</span>
+            
+            <div style="background-color: #e9ecef; width: 100%; height: 200px; border-radius: 4px; display: flex; align-items: center; justify-content: center; color: #6c757d;">
+                <span style="font-size: 2rem;">📢</span>
+            </div>
+            
+            <p style="margin-top: 15px; font-size: 0.85rem; color: #6c757d;">
+                Apoya el periodismo regional visitando a nuestros patrocinadores.
+            </p>
+        </div>
+    `;
+    return div;
+}
+
 // ========== CREAR NODO DE NOTICIA ==========
 function crearNodoNoticia(n, viewType = currentView) {
     const div = document.createElement('div');
@@ -41,6 +77,22 @@ function crearNodoNoticia(n, viewType = currentView) {
     const categoriaTag = n.categoria ? `<span class="tag categoria-tag ${n.categoria}">${n.categoria.charAt(0).toUpperCase() + n.categoria.slice(1)}</span>` : '';
     const departamentoTag = n.departamento ? `<span class="tag departamento-tag">${n.departamento.charAt(0).toUpperCase() + n.departamento.slice(1).replace('-', ' ')}</span>` : '';
     const isFav = isFavorito(n.id) ? 'active' : '';
+    // Definir icono y clase según sentimiento
+    let sentimientoIcon = '';
+    let sentimientoClass = '';
+    
+    if (n.sentimiento === 'positivo') {
+        sentimientoIcon = '😊'; // O usa un icono de FontAwesome: <i class="fas fa-smile"></i>
+        sentimientoClass = 'sentimiento-pos';
+    } else if (n.sentimiento === 'negativo') {
+        sentimientoIcon = '😟';
+        sentimientoClass = 'sentimiento-neg';
+    } else {
+        sentimientoIcon = '😐';
+        sentimientoClass = 'sentimiento-neu';
+    }
+    
+    const sentimientoTag = n.sentimiento ? `<span class="tag ${sentimientoClass}" title="Sentimiento: ${n.sentimiento}">${sentimientoIcon}</span>` : '';
     
     if (viewType === 'list') {
         div.innerHTML = `
@@ -58,6 +110,7 @@ function crearNodoNoticia(n, viewType = currentView) {
                         ${tipoTag}
                         ${categoriaTag}
                         ${departamentoTag}
+                        ${sentimientoTag}
                     </div>
                     <p>${n.resumen || ''}</p>
                     <div class="actions">
@@ -77,6 +130,7 @@ function crearNodoNoticia(n, viewType = currentView) {
             <div class="tags">
                 ${tipoTag}
                 ${categoriaTag}
+                ${sentimientoTag}
             </div>
             ${img}
             <p>${n.resumen || ''}</p>
@@ -173,6 +227,10 @@ function cargarNoticias(filtros = {}, append = true, resetPage = false) {
             paginationData = data.pagination || {};
             
             noticias.forEach(noticia => {
+                // Cada 3 noticias, añadir un nodo de publicidad
+                if (noticias.indexOf(noticia) % 5 === 0) {
+                    contenedor.appendChild(crearNodoPublicidad());
+                }
                 contenedor.appendChild(crearNodoNoticia(noticia));
             });
             
@@ -260,6 +318,83 @@ function updatePaginationControls(pagination) {
 function goToPage(newPage) {
     page = newPage;
     cargarNoticias(currentFilters, false, false);
+}
+
+// ========== MAPA DE CALOR ==========
+function cargarMapaCalor() {
+    fetch('/api/departamentos')
+        .then(r => r.json())
+        .then(data => {
+            const deps = data.departamentos || [];
+            const maxCount = deps.length > 0 ? deps[0].cantidad : 1;
+            
+            // Crear mapa de conteos para acceso rápido
+            const counts = {};
+            deps.forEach(d => counts[d.departamento] = d.cantidad);
+
+            // Pintar el SVG
+            document.querySelectorAll('.dept-path').forEach(path => {
+                const deptId = path.id;
+                const count = counts[deptId] || 0;
+                
+                // Calcular intensidad de color (Escala de Rojos/Morados)
+                // Si count es 0 -> gris claro (#e5e7eb)
+                // Si tiene datos -> opacidad basada en porcentaje del máximo
+                if (count > 0) {
+                    const intensity = Math.max(0.2, count / maxCount); 
+                    // Usamos un color base púrpura (como tu tema): rgb(147, 51, 234)
+                    path.style.fill = `rgba(147, 51, 234, ${intensity})`;
+                } else {
+                    path.style.fill = '#e5e7eb';
+                }
+
+                // Eventos de Mouse
+                path.onmouseenter = (e) => showMapTooltip(e, path.getAttribute('title'), count);
+                path.onmouseleave = () => hideMapTooltip();
+                
+                // Click filtra las noticias
+                path.onclick = () => {
+                    document.getElementById('filtro-departamento').value = deptId;
+                    document.getElementById('btn-filtrar').click();
+                    // Scroll hacia las noticias
+                    document.getElementById('noticias').scrollIntoView({behavior: 'smooth'});
+                };
+            });
+
+            // Actualizar lista lateral del mapa
+            const list = document.getElementById('map-stats-list');
+            if(list) {
+                list.innerHTML = deps.slice(0, 5).map((d, i) => `
+                    <li class="flex justify-between items-center p-2 ${i===0 ? 'bg-purple-50 rounded' : ''}">
+                        <span class="font-medium capitalize">
+                            ${i+1}. ${d.departamento.replace('-', ' ')}
+                        </span>
+                        <span class="bg-purple-100 text-purple-800 py-1 px-2 rounded-full text-xs font-bold">
+                            ${d.cantidad} noticias
+                        </span>
+                    </li>
+                `).join('');
+            }
+        });
+}
+
+function showMapTooltip(e, name, count) {
+    const tooltip = document.getElementById('map-tooltip');
+    tooltip.innerHTML = `<strong>${name}</strong><br>${count} noticias`;
+    tooltip.style.display = 'block';
+    tooltip.classList.remove('hidden');
+    
+    // Posicionar cerca del mouse
+    // Ajuste simple relativo al contenedor
+    const containerRect = document.getElementById('peru-map-container').getBoundingClientRect();
+    tooltip.style.left = (e.clientX - containerRect.left + 10) + 'px';
+    tooltip.style.top = (e.clientY - containerRect.top - 30) + 'px';
+}
+
+function hideMapTooltip() {
+    const tooltip = document.getElementById('map-tooltip');
+    tooltip.style.display = 'none';
+    tooltip.classList.add('hidden');
 }
 
 // ========== VISTA PREVIA ==========
@@ -1011,32 +1146,80 @@ document.addEventListener('DOMContentLoaded', function() {
     const btnGridView = document.getElementById('btn-grid-view');
     const btnListView = document.getElementById('btn-list-view');
     const noticiasContainer = document.getElementById('noticias');
+    const btnMapView = document.getElementById('btn-map-view'); 
+    const mapaSection = document.getElementById('mapa-calor'); 
     
-    if (btnGridView && btnListView && noticiasContainer) {
+    // Verificar que existan los elementos antes de agregar eventos
+    if (btnGridView && btnListView && btnMapView && noticiasContainer) {
+        
+        // --- 1. VISTA CUADRÍCULA ---
         btnGridView.addEventListener('click', () => {
             currentView = 'grid';
             noticiasContainer.className = 'container grid-view';
+            
+            // Actualizar botones activos
             btnGridView.classList.add('active');
             btnListView.classList.remove('active');
             
-            // Re-renderizar noticias con nueva vista
+            // Ocultar mapa si quieres que sea exclusivo (opcional)
+            mapaSection.style.display = 'none';
+            btnMapView.classList.remove('active');
+
+            // Actualizar clases de las noticias existentes
             const noticias = noticiasContainer.querySelectorAll('.noticia');
             noticias.forEach(noticia => {
-                noticia.className = `noticia grid-view`;
+                // Mantenemos la clase 'publicidad' si la tiene
+                const esPublicidad = noticia.classList.contains('publicidad');
+                noticia.className = `noticia grid-view ${esPublicidad ? 'publicidad' : ''}`;
             });
         });
         
+        // --- 2. VISTA LISTA ---
         btnListView.addEventListener('click', () => {
             currentView = 'list';
             noticiasContainer.className = 'container list-view';
+            
+            // Actualizar botones activos
             btnListView.classList.add('active');
             btnGridView.classList.remove('active');
             
-            // Re-renderizar noticias con nueva vista
+            // Ocultar mapa si quieres que sea exclusivo
+            mapaSection.style.display = 'none';
+            btnMapView.classList.remove('active');
+
+            // Actualizar clases de las noticias existentes
             const noticias = noticiasContainer.querySelectorAll('.noticia');
             noticias.forEach(noticia => {
-                noticia.className = `noticia list-view`;
+                const esPublicidad = noticia.classList.contains('publicidad');
+                noticia.className = `noticia list-view ${esPublicidad ? 'publicidad' : ''}`;
             });
+        });
+
+        // --- 3. MAPA DE CALOR (LO QUE FALTABA) ---
+        btnMapView.addEventListener('click', () => {
+            // Comprobar si está visible
+            const isVisible = mapaSection.style.display !== 'none';
+            
+            if (!isVisible) {
+                // MOSTRAR MAPA
+                mapaSection.style.display = 'block';
+                btnMapView.classList.add('active');
+                
+                // Desactivar visualmente las otras vistas (opcional)
+                btnGridView.classList.remove('active');
+                btnListView.classList.remove('active');
+                
+                // Llamar a la función que pinta el mapa (definida arriba)
+                cargarMapaCalor(); 
+            } else {
+                // OCULTAR MAPA
+                mapaSection.style.display = 'none';
+                btnMapView.classList.remove('active');
+                
+                // Restaurar el botón de la vista actual
+                if (currentView === 'grid') btnGridView.classList.add('active');
+                else btnListView.classList.add('active');
+            }
         });
     }
     

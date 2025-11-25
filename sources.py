@@ -326,6 +326,76 @@ FUENTES = [
         "date_selector": "time.ListSection_list__section--time__2cnSA",
         "category_selector": "a.CardSection_section__category__q0s6z",
         "categoria": "nacional"
+    },
+    # ----------------- FUENTES REGIONALES (ACTUALIZADO) -----------------
+
+    # AREQUIPA - El Búho
+    {
+        "url": "https://elbuho.pe/seccion/ciudad/",
+        "fuente": "El Búho",
+        "base": "https://elbuho.pe",
+        # El contenedor es 'div.row' porque envuelve tanto el texto (col-8) como la imagen (col-4)
+        "container": "div.row", 
+        "title_selector": "div.feed_internas h2 a",
+        "img_selector": "div.col-md-4 img",
+        "summary_selector": "div.feed_internas p",
+        "author_selector": "div.feed_internas div.text-muted.small",
+        "date_selector": "div.fechaleft span",
+        "category_selector": "span.text-rojos",
+        "categoria": "regional",
+        "departamento": "arequipa"
+    },
+
+    # CUSCO - Cusco Post
+    {
+        "url": "https://cuscopost.pe/cusco/",
+        "fuente": "Cusco Post",
+        "base": "https://cuscopost.pe",
+        "container": "div.td-module-container",
+        "title_selector": "h3.entry-title a",
+        # Usamos data-img-url porque la imagen suele cargar con lazy-load
+        "img_selector": "span.entry-thumb::attr(data-img-url)",
+        "summary_selector": "div.td-excerpt",
+        "author_selector": None,
+        "date_selector": "time.entry-date",
+        "category_selector": "a.td-post-category",
+        "categoria": "regional",
+        "departamento": "cusco"
+    },
+
+    # JUNÍN - Huanca York Times
+    {
+        "url": "https://hytimes.pe/local/",
+        "fuente": "Huanca York Times",
+        "base": "https://hytimes.pe",
+        "container": "article.elementor-post",
+        "title_selector": "h3.elementor-post__title a",
+        "img_selector": "div.elementor-post__thumbnail img",
+        "summary_selector": "div.elementor-post__excerpt p",
+        "author_selector": None,
+        "date_selector": "span.elementor-post-date",
+        "category_selector": None, # Toma la categoría de la fuente
+        "categoria": "regional",
+        "departamento": "junin"
+    },
+
+    # LA LIBERTAD (Trujillo) - La Industria
+    {
+        "url": "http://laindustria.pe/trujillo",
+        "fuente": "La Industria",
+        "base": "http://laindustria.pe",
+        "container": "div.col-11.p-1", # Selector específico combinando clases
+        "title_selector": "p.textoTruncado a",
+        # NOTA: La imagen está en un estilo background. 
+        # Si tu scraper no soporta extraer estilos, capturará el string del estilo.
+        # Por ahora intentamos capturar el div, pero requeriría una mejora en scraper.py para limpiar la URL.
+        "img_selector": "div.sobreImagen::attr(style)", 
+        "summary_selector": None,
+        "author_selector": None,
+        "date_selector": None, # No hay fecha visible en el snippet
+        "category_selector": "div.top-left small",
+        "categoria": "regional",
+        "departamento": "la-libertad"
     }
 ]
 
@@ -369,50 +439,41 @@ def detectar_departamento_en_texto(texto):
     
     return None
 
-def clasificar_noticia(titulo, resumen, categoria_fuente):
+def clasificar_noticia(titulo, resumen, categoria_fuente, departamento_fuente=None):
     """
-    Clasifica una noticia en una de las 3 categorías principales.
-    
-    Args:
-        titulo: Título de la noticia
-        resumen: Resumen de la noticia
-        categoria_fuente: Categoría asignada por la fuente
-    
-    Returns:
-        dict: {
-            'categoria': 'nacional'|'internacional'|'regional',
-            'departamento': nombre_departamento|None
-        }
+    Clasifica una noticia respetando su fuente de origen o detectando el lugar en el texto.
     """
     texto_completo = f"{titulo or ''} {resumen or ''}".lower()
     
-    # Detectar departamento en el texto
-    departamento = detectar_departamento_en_texto(texto_completo)
+    # 1. Prioridad: Si la fuente ya tiene un departamento asignado (Ej: El Búho -> Arequipa), úsalo.
+    if departamento_fuente:
+        return {
+            'categoria': 'regional', # Forzamos regional si tiene departamento específico
+            'departamento': departamento_fuente
+        }
     
-    # Si la fuente ya está clasificada como regional (Puno), mantenerlo
+    # 2. Si la fuente es "regional" pero no tiene departamento (ej. un blog genérico del sur),
+    # mantenemos la lógica antigua (o por defecto Puno si es tu región base).
     if categoria_fuente == "regional":
         return {
             'categoria': 'regional',
             'departamento': 'puno'
         }
     
-    # Si se detecta un departamento específico, clasificar como nacional
-    if departamento:
+    # 3. Detección automática para medios nacionales (RPP, El Comercio, etc.)
+    # Buscamos menciones de departamentos en el texto
+    departamento_detectado = detectar_departamento_en_texto(texto_completo)
+    
+    if departamento_detectado:
         return {
             'categoria': 'nacional',
-            'departamento': departamento
+            'departamento': departamento_detectado
         }
     
-    # Si la fuente está clasificada como nacional, mantenerlo
-    if categoria_fuente == "nacional":
-        return {
-            'categoria': 'nacional',
-            'departamento': None
-        }
-    
-    # Por defecto, clasificar como internacional
+    # 4. Si no es regional y no menciona ningún lugar de Perú, asumimos Internacional
+    # (O mantenemos nacional sin departamento específico)
     return {
-        'categoria': 'internacional',
+        'categoria': 'internacional' if not departamento_detectado else 'nacional',
         'departamento': None
     }
 
