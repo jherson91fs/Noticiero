@@ -1152,28 +1152,57 @@ document.addEventListener('DOMContentLoaded', function() {
     // Verificar que existan los elementos antes de agregar eventos
     if (btnGridView && btnListView && btnMapView && noticiasContainer) {
         
+        // Función para actualizar botones visualmente
+        const setActiveButton = (btn) => {
+            [btnGridView, btnListView, btnMapView].forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        };
+
         // --- 1. VISTA CUADRÍCULA ---
         btnGridView.addEventListener('click', () => {
             currentView = 'grid';
             noticiasContainer.className = 'container grid-view';
+            noticiasContainer.style.display = 'grid'; // Asegurar que se vea
+            mapaSection.style.display = 'none';       // Ocultar mapa
+            setActiveButton(btnGridView);
             
-            // Actualizar botones activos
-            btnGridView.classList.add('active');
-            btnListView.classList.remove('active');
-            
-            // Ocultar mapa si quieres que sea exclusivo (opcional)
-            mapaSection.style.display = 'none';
-            btnMapView.classList.remove('active');
-
-            // Actualizar clases de las noticias existentes
-            const noticias = noticiasContainer.querySelectorAll('.noticia');
-            noticias.forEach(noticia => {
-                // Mantenemos la clase 'publicidad' si la tiene
-                const esPublicidad = noticia.classList.contains('publicidad');
-                noticia.className = `noticia grid-view ${esPublicidad ? 'publicidad' : ''}`;
+            // Re-aplicar clases a las noticias
+            document.querySelectorAll('.noticia').forEach(n => {
+                const esPubli = n.classList.contains('publicidad');
+                n.className = `noticia grid-view ${esPubli ? 'publicidad' : ''}`;
             });
         });
         
+        // --- 2. VISTA LISTA ---
+        btnListView.addEventListener('click', () => {
+            currentView = 'list';
+            noticiasContainer.className = 'container list-view';
+            noticiasContainer.style.display = 'block'; // Asegurar que se vea
+            mapaSection.style.display = 'none';        // Ocultar mapa
+            setActiveButton(btnListView);
+            
+            document.querySelectorAll('.noticia').forEach(n => {
+                const esPubli = n.classList.contains('publicidad');
+                n.className = `noticia list-view ${esPubli ? 'publicidad' : ''}`;
+            });
+        });
+
+        // --- 3. VISTA MAPA (ESTO FALTABA) ---
+        btnMapView.addEventListener('click', () => {
+            const isHidden = mapaSection.style.display === 'none';
+            
+            if (isHidden) {
+                // Mostrar Mapa
+                mapaSection.style.display = 'block';
+                setActiveButton(btnMapView);
+                cargarMapaCalor(); // <--- ¡AQUÍ SE LLAMA A LA FUNCIÓN!
+            } else {
+                // Ocultar Mapa (volver a grid)
+                mapaSection.style.display = 'none';
+                btnGridView.click(); // Volver a la vista por defecto
+            }
+        });
+    
         // --- 2. VISTA LISTA ---
         btnListView.addEventListener('click', () => {
             currentView = 'list';
@@ -1195,32 +1224,172 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
 
-        // --- 3. MAPA DE CALOR (LO QUE FALTABA) ---
-        btnMapView.addEventListener('click', () => {
-            // Comprobar si está visible
-            const isVisible = mapaSection.style.display !== 'none';
+// ========== MAPA DE CALOR (CARGA EXTERNA) ==========
+// Mapeo de nombres/IDs del SVG de Wikimedia a los de tu Base de Datos
+const MAP_IDS = {
+    'Amazonas': 'amazonas', 'Ancash': 'ancash', 'Áncash': 'ancash',
+    'Apurimac': 'apurimac', 'Apurímac': 'apurimac',
+    'Arequipa': 'arequipa', 'Ayacucho': 'ayacucho', 'Cajamarca': 'cajamarca',
+    'Callao': 'callao', 'Cusco': 'cusco', 'Cuzco': 'cusco',
+    'Huancavelica': 'huancavelica', 'Huanuco': 'huanuco', 'Huánuco': 'huanuco',
+    'Ica': 'ica', 'Junin': 'junin', 'Junín': 'junin',
+    'La Libertad': 'la-libertad', 'La_Libertad': 'la-libertad',
+    'Lambayeque': 'lambayeque',
+    'Lima': 'lima', 'Lima Province': 'lima', 'Lima_Province': 'lima',
+    'Loreto': 'loreto', 'Madre de Dios': 'madre-de-dios', 'Madre_de_Dios': 'madre-de-dios',
+    'Moquegua': 'moquegua', 'Pasco': 'pasco', 'Piura': 'piura',
+    'Puno': 'puno', 'San Martin': 'san-martin', 'San Martín': 'san-martin',
+    'Tacna': 'tacna', 'Tumbes': 'tumbes', 'Ucayali': 'ucayali'
+};
+
+let mapaCargado = false;
+
+function cargarMapaCalor() {
+    const container = document.getElementById('peru-map-container');
+    if (!container) return;
+
+    // 1. Si no hemos cargado el mapa, lo traemos del servidor
+    if (!mapaCargado) {
+        // Asegúrate de que el archivo se llame 'peru.svg' y esté en la carpeta 'static'
+        fetch('/static/peru.svg')
+            .then(response => {
+                if (!response.ok) throw new Error("No se encontró el archivo SVG");
+                return response.text();
+            })
+            .then(svgContent => {
+                // Inyectar el SVG dentro del div
+                container.innerHTML = svgContent;
+                
+                // 2. Ajustar el SVG para que se adapte al contenedor (Responsivo)
+                const svg = container.querySelector('svg');
+                if (svg) {
+                    // A. Eliminar restricciones de tamaño originales del archivo
+                    svg.removeAttribute('width');
+                    svg.removeAttribute('height');
+                    
+                    // B. Forzar comportamiento responsivo
+                    svg.style.width = '100%';
+                    svg.style.height = 'auto'; 
+                    
+                    // C. IMPORTANTE: Aumentar la altura máxima permitida
+                    // El mapa de Perú es alto (vertical), si limitamos mucho la altura se verá pequeño.
+                    svg.style.maxHeight = '800px'; // Subimos de 500px a 800px
+                    
+                    // D. Ajustar el "ViewBox" para eliminar márgenes vacíos (Recorte)
+                    // Los mapas suelen traer mucho espacio en blanco alrededor.
+                    // Si el mapa se ve muy pequeño en el centro, prueba ajustando estos valores:
+                    // "min-x min-y width height"
+                    if (svg.getAttribute('viewBox')) {
+                        // Forzamos un ajuste para que ocupe todo el marco
+                        svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+                    } else {
+                        // Si no trae viewBox, le ponemos uno estándar para Perú
+                        svg.setAttribute('viewBox', '0 0 600 850');
+                    }
+
+                    svg.classList.add('filter', 'drop-shadow-lg');
+                }
+                
+                mapaCargado = true;
+                colorearMapa(); // Una vez cargado, pintamos los datos
+            })
+            .catch(err => {
+                console.error(err);
+                container.innerHTML = `<div class="text-center p-4 text-red-500">
+                    <p>⚠️ Error al cargar el mapa.</p>
+                    <p class="text-xs mt-2">Verifica que <b>static/peru.svg</b> existe.</p>
+                </div>`;
+            });
+    } else {
+        colorearMapa(); // Si ya estaba cargado, solo actualizamos colores
+    }
+}
+
+function colorearMapa() {
+    // Obtener datos de noticias por departamento
+    fetch('/api/departamentos')
+        .then(r => r.json())
+        .then(data => {
+            const deps = data.departamentos || [];
             
-            if (!isVisible) {
-                // MOSTRAR MAPA
-                mapaSection.style.display = 'block';
-                btnMapView.classList.add('active');
+            // Crear diccionario de conteos: {'puno': 15, 'lima': 40...}
+            const counts = {};
+            deps.forEach(d => counts[d.departamento] = d.cantidad);
+            
+            // Obtener el valor máximo para calcular la intensidad del color
+            const maxCount = deps.length > 0 ? deps[0].cantidad : 1;
+
+            // Recorrer todos los "caminos" (regiones) del mapa SVG
+            document.querySelectorAll('#peru-map-container path').forEach(path => {
+                // Intentar obtener el nombre de la región del SVG (ID o title o name)
+                const rawId = path.id || path.getAttribute('name') || path.getAttribute('title');
                 
-                // Desactivar visualmente las otras vistas (opcional)
-                btnGridView.classList.remove('active');
-                btnListView.classList.remove('active');
+                // Traducir ese nombre al formato de nuestra base de datos
+                const dbKey = MAP_IDS[rawId] || rawId?.toLowerCase();
                 
-                // Llamar a la función que pinta el mapa (definida arriba)
-                cargarMapaCalor(); 
-            } else {
-                // OCULTAR MAPA
-                mapaSection.style.display = 'none';
-                btnMapView.classList.remove('active');
+                const count = counts[dbKey] || 0;
                 
-                // Restaurar el botón de la vista actual
-                if (currentView === 'grid') btnGridView.classList.add('active');
-                else btnListView.classList.add('active');
-            }
+                // Estilos base para interacción
+                path.style.transition = 'fill 0.3s ease';
+                path.style.cursor = 'pointer';
+                path.style.stroke = '#ffffff';
+                path.style.strokeWidth = '0.5px';
+
+                // Colorear según cantidad de noticias
+                if (count > 0) {
+                    // Intensidad entre 0.3 y 1.0 basado en el volumen de noticias
+                    const intensity = Math.max(0.3, count / maxCount);
+                    path.style.fill = `rgba(147, 51, 234, ${intensity})`; // Color Púrpura
+                } else {
+                    path.style.fill = '#f3f4f6'; // Gris claro si no hay datos
+                }
+
+                // Eventos del Mouse
+                path.onmouseenter = (e) => {
+                    path.style.filter = 'brightness(0.85)'; // Oscurecer al pasar mouse
+                    // Mostrar nombre bonito en el tooltip
+                    const nombreDisplay = dbKey ? (dbKey.charAt(0).toUpperCase() + dbKey.slice(1)).replace(/-/g, ' ') : rawId;
+                    showMapTooltip(e, nombreDisplay, count);
+                };
+                
+                path.onmouseleave = () => {
+                    path.style.filter = 'none';
+                    hideMapTooltip();
+                };
+                
+                // Al hacer clic, filtrar noticias por ese departamento
+                path.onclick = () => {
+                    if(dbKey) {
+                        const select = document.getElementById('filtro-departamento');
+                        select.value = dbKey;
+                        document.getElementById('btn-filtrar').click();
+                        document.getElementById('noticias').scrollIntoView({behavior: 'smooth'});
+                    }
+                };
+            });
+            
+            // Actualizar la lista de texto al lado del mapa
+            actualizarLeyenda(deps);
         });
+}
+
+function actualizarLeyenda(deps) {
+    const list = document.getElementById('map-stats-list');
+    if (list && deps.length > 0) {
+        list.innerHTML = deps.slice(0, 5).map((d, i) => `
+            <li class="flex justify-between items-center p-2 ${i===0 ? 'bg-purple-50 rounded' : ''} border-b border-gray-50">
+                <span class="font-medium capitalize text-gray-700">
+                    ${i+1}. ${d.departamento.replace(/-/g, ' ')}
+                </span>
+                <span class="bg-purple-100 text-purple-800 py-1 px-2 rounded-full text-xs font-bold">
+                    ${d.cantidad}
+                </span>
+            </li>
+        `).join('');
+    } else if (list) {
+        list.innerHTML = '<li class="text-gray-500 italic p-2">No hay datos suficientes.</li>';
+    }
+}
     }
     
     // Controles de modo lectura

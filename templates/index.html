@@ -78,49 +78,19 @@
                 <span class="ml-auto text-xs font-normal text-gray-500">Color más intenso = Más noticias</span>
             </h3>
             
-            <div class="flex flex-col md:flex-row gap-8 items-center justify-center">
-                <div id="peru-map-container" class="w-full max-w-md relative">
-                    <svg viewBox="0 0 500 700" class="w-full h-auto filter drop-shadow-lg" id="svg-peru">
-                        <style>
-                            .dept-path { fill: #e5e7eb; stroke: #fff; stroke-width: 1px; transition: all 0.3s ease; cursor: pointer; }
-                            .dept-path:hover { stroke: #666; stroke-width: 2px; z-index: 10; }
-                        </style>
-                        <path id="tumbes" title="Tumbes" class="dept-path" d="M40,50 L60,40 L70,60 Z" /> 
-                        <path id="piura" title="Piura" class="dept-path" d="M30,60 L80,50 L90,100 L20,110 Z" />
-                        <path id="lambayeque" title="Lambayeque" class="dept-path" d="M60,110 L100,100 L110,130 L70,140 Z" />
-                        <path id="la-libertad" title="La Libertad" class="dept-path" d="M70,140 L140,120 L150,180 L80,190 Z" />
-                        <path id="cajamarca" title="Cajamarca" class="dept-path" d="M90,90 L130,80 L140,130 L100,140 Z" />
-                        <path id="amazonas" title="Amazonas" class="dept-path" d="M130,40 L170,40 L180,110 L140,110 Z" />
-                        <path id="san-martin" title="San Martín" class="dept-path" d="M140,110 L180,110 L190,180 L150,180 Z" />
-                        <path id="loreto" title="Loreto" class="dept-path" d="M170,10 L450,30 L480,250 L180,180 Z" />
-                        
-                        <path id="ancash" title="Áncash" class="dept-path" d="M80,190 L130,180 L140,240 L90,250 Z" />
-                        <path id="huanuco" title="Huánuco" class="dept-path" d="M140,180 L190,180 L180,240 L140,230 Z" />
-                        <path id="pasco" title="Pasco" class="dept-path" d="M150,230 L200,230 L190,260 L150,260 Z" />
-                        <path id="junin" title="Junín" class="dept-path" d="M160,260 L250,250 L230,330 L160,320 Z" />
-                        <path id="ucayali" title="Ucayali" class="dept-path" d="M190,180 L280,200 L280,350 L220,300 Z" />
-                        <path id="lima" title="Lima" class="dept-path" d="M100,250 L160,250 L170,340 L120,350 Z" />
-                        <path id="callao" title="Callao" class="dept-path" d="M115,310 L125,310 L125,320 L115,320 Z" />
-                        <path id="ica" title="Ica" class="dept-path" d="M140,350 L190,360 L210,420 L160,410 Z" />
-                        <path id="huancavelica" title="Huancavelica" class="dept-path" d="M170,340 L210,330 L220,370 L180,380 Z" />
-                        <path id="ayacucho" title="Ayacucho" class="dept-path" d="M190,350 L230,340 L250,430 L210,410 Z" />
-                        
-                        <path id="apurimac" title="Apurímac" class="dept-path" d="M240,380 L290,380 L280,430 L240,420 Z" />
-                        <path id="cusco" title="Cusco" class="dept-path" d="M250,320 L340,310 L350,400 L280,410 Z" />
-                        <path id="madre-de-dios" title="Madre de Dios" class="dept-path" d="M300,280 L450,300 L430,380 L340,350 Z" />
-                        <path id="puno" title="Puno" class="dept-path" d="M300,410 L380,390 L400,500 L330,510 Z" />
-                        <path id="arequipa" title="Arequipa" class="dept-path" d="M220,430 L300,420 L330,490 L250,510 Z" />
-                        <path id="moquegua" title="Moquegua" class="dept-path" d="M310,490 L350,490 L360,530 L320,530 Z" />
-                        <path id="tacna" title="Tacna" class="dept-path" d="M330,530 L370,530 L360,560 L340,560 Z" />
-                    </svg>
+            <div class="flex flex-col md:flex-row gap-8 items-start justify-center">
+                <div class="w-full max-w-md relative mx-auto">
+                    <div id="peru-map-container" class="w-full flex justify-center items-center min-h-[600px] bg-gray-50 rounded-lg overflow-hidden">
+                        <span class="text-gray-400 animate-pulse">Cargando mapa...</span>
+                    </div>
                     
-                    <div id="map-tooltip" class="absolute bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded pointer-events-none hidden" style="z-index: 20;"></div>
+                    <div id="map-tooltip" class="absolute bg-black bg-opacity-80 text-white text-xs px-2 py-1 rounded pointer-events-none hidden" style="z-index: 50;"></div>
                 </div>
 
-                <div class="flex-1">
+                <div class="flex-1 w-full">
                     <h4 class="font-bold text-gray-700 mb-3">Top Departamentos Activos</h4>
-                    <ul id="map-stats-list" class="space-y-2 text-sm">
-                        <li class="text-gray-500 italic">Cargando datos del mapa...</li>
+                    <ul id="map-stats-list" class="space-y-2 text-sm bg-gray-50 p-4 rounded-lg border border-gray-100">
+                        <li class="text-gray-500 italic">Haz clic en el botón 🗺️ para cargar...</li>
                     </ul>
                 </div>
             </div>
